@@ -88,23 +88,31 @@ To restrict to specific website, manually change `@match`.
 
 ## Real-world comparisons
 
-You can use [testkit/compare.html](https://github.com/Ikkoru/crisp-images/blob/master/testkit/compare.html) to compare the test images in the same folder, or an image of your own choosing.
+You can use [testkit/compare.html](https://github.com/Ikkoru/crisp-images/tree/main/testkit) to compare the test images in the same folder, or an image of your own choosing.
 
+<p align="left">
 **Text crop:**
-Lanczos3:
-![Lanczos3](comparisons/text_fit-screen_lanczos3_2530x3598.png)
-Bilinear (browser):
-![Bilinear](comparisons/text_fit-screen_browser_2530x3598.png)
-Nearest Neighbour:
-![Nearest-Neighbour](comparisons/text_fit-screen_nearest_2530x3598.png)
+
+Lanczos3:<br>
+<img src="comparisons/text_fit-screen_lanczos3_2530x3598.png" alt="Lanczos3">
+
+Bilinear (browser):<br>
+<img src="comparisons/text_fit-screen_browser_2530x3598.png" alt="Bilinear">
+
+Nearest Neighbour:<br>
+<img src="comparisons/text_fit-screen_nearest_2530x3598.png" alt="Nearest Neighbour">
 
 **Line Art crop:**
-Lanczos3:
-![Lanczos3](comparisons/bw_fit-screen_lanczos3_2530x3598.png)
-Bilinear (browser):
-![Bilinear](comparisons/bw_fit-screen_browser_2530x3598.png)
-Nearest Neighbour:
-![Nearest-Neighbour](comparisons/bw_fit-screen_nearest_2530x3598.png)
+
+Lanczos3:<br>
+<img src="comparisons/bw_fit-screen_lanczos3_2530x3598.png" alt="Lanczos3">
+
+Bilinear (browser):<br>
+<img src="comparisons/bw_fit-screen_browser_2530x3598.png" alt="Bilinear">
+
+Nearest Neighbour:<br>
+<img src="comparisons/bw_fit-screen_nearest_2530x3598.png" alt="Nearest Neighbour">
+</p>
 
 ## Why not just `image-rendering: pixelated`?
 
@@ -114,7 +122,7 @@ Because nearest-neighbour is only correct at whole-number zooms. At 2.276× — 
 
 ## Is it really Lanczos3?
 
-You don't have to take my word for it. [testkit/shader-selftest.html](https://github.com/Ikkoru/crisp-images/blob/master/testkit/shader-selftest.html) runs the shipping shader against a separate reference implementation and prints the difference:
+You don't have to take my word for it. [testkit/shader-selftest.html](https://github.com/Ikkoru/crisp-images/tree/main/testkit) runs the shipping shader against a separate reference implementation and prints the difference:
 
 ```
 2.276x (fill width)   mean|d|=0.057  max|d|=1
