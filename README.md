@@ -93,6 +93,7 @@ You can use [testkit/compare.html](https://github.com/Ikkoru/crisp-images/tree/m
 <p align="left">
 **Text crop:**
 
+
 Lanczos3:<br>
 <img src="comparisons/text_fit-screen_lanczos3_2530x3598.png" alt="Lanczos3">
 
@@ -103,6 +104,7 @@ Nearest Neighbour:<br>
 <img src="comparisons/text_fit-screen_nearest_2530x3598.png" alt="Nearest Neighbour">
 
 **Line Art crop:**
+
 
 Lanczos3:<br>
 <img src="comparisons/bw_fit-screen_lanczos3_2530x3598.png" alt="Lanczos3">
