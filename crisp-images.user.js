@@ -17,7 +17,7 @@
 // @license      MIT
 // @homepageURL  https://github.com/Ikkoru/crisp-images
 // @supportURL   https://github.com/Ikkoru/crisp-images/issues
-// @icon         data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23151515'/%3E%3Crect x='2' y='2' width='5' height='12' fill='%23808080'/%3E%3Cg fill='%23ffffff'%3E%3Crect x='9' y='2' width='1' height='12'/%3E%3Crect x='11' y='2' width='1' height='12'/%3E%3Crect x='13' y='2' width='1' height='12'/%3E%3C/g%3E%3C/svg%3E
+// @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxNiAxNic+PHJlY3Qgd2lkdGg9JzE2JyBoZWlnaHQ9JzE2JyBmaWxsPScjMTUxNTE1Jy8+PHJlY3QgeD0nMicgeT0nMicgd2lkdGg9JzUnIGhlaWdodD0nMTInIGZpbGw9JyM4MDgwODAnLz48ZyBmaWxsPScjZmZmZmZmJz48cmVjdCB4PSc5JyB5PScyJyB3aWR0aD0nMScgaGVpZ2h0PScxMicvPjxyZWN0IHg9JzExJyB5PScyJyB3aWR0aD0nMScgaGVpZ2h0PScxMicvPjxyZWN0IHg9JzEzJyB5PScyJyB3aWR0aD0nMScgaGVpZ2h0PScxMicvPjwvZz48L3N2Zz4=
 // @match        *://*/*
 // @match        file:///*
 // @grant        none
