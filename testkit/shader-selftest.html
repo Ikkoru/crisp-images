@@ -1,0 +1,355 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lanczos3 shader self-test</title>
+<style>
+  body { background:#1a1a1a; color:#ddd; font:13px/1.6 Consolas,monospace; padding:16px; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:12px; }
+  canvas { image-rendering:pixelated; border:1px solid #444; }
+  .pass { color:#5f5; } .fail { color:#f66; }
+  pre { white-space:pre-wrap; }
+</style>
+<h3>Lanczos3 shader self-test</h3>
+<p>Runs the exact GLSL from <code>crisp-images.user.js</code> against a CPU reference
+implementation of the same filter. Keep the shader source below in sync with the
+userscript if you edit it.</p>
+<pre id="out">running...</pre>
+<div class="row" id="vis"></div>
+
+<script>
+const VERT = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_tex;
+uniform vec2  u_srcSize;
+uniform vec2  u_dstSize;
+uniform vec2  u_dir;
+uniform float u_scale;
+uniform int   u_kernel;
+in  vec2 v_uv;
+out vec4 outColor;
+
+const float PI = 3.141592653589793;
+
+float sinc(float x) {
+  if (abs(x) < 1e-6) return 1.0;
+  float p = PI * x;
+  return sin(p) / p;
+}
+
+float lanczos3(float x) {
+  x = abs(x);
+  if (x >= 3.0) return 0.0;
+  return sinc(x) * sinc(x / 3.0);
+}
+
+void main() {
+  vec2 dstPx = v_uv * u_dstSize;
+  float along = dot(dstPx, u_dir);
+  vec2  perp  = dstPx - along * u_dir;
+
+  float srcPos = along / u_scale;
+
+  if (u_kernel == 1) {
+    vec2 srcPx = perp + (floor(srcPos) + 0.5) * u_dir;
+    outColor = texture(u_tex, srcPx / u_srcSize);
+    return;
+  }
+
+  float filterScale = max(1.0, 1.0 / u_scale);
+  float support = 3.0 * filterScale;
+
+  int jStart = int(floor(srcPos - support - 0.5));
+  int jEnd   = int(ceil (srcPos + support - 0.5));
+
+  vec4  acc  = vec4(0.0);
+  float wsum = 0.0;
+  for (int j = jStart; j <= jEnd; ++j) {
+    float w = lanczos3((srcPos - (float(j) + 0.5)) / filterScale);
+    if (w == 0.0) continue;
+    vec2 srcPx = perp + (float(j) + 0.5) * u_dir;
+    acc  += w * texture(u_tex, srcPx / u_srcSize);
+    wsum += w;
+  }
+  outColor = wsum > 0.0 ? acc / wsum : vec4(0.0);
+}`;
+
+const log = [];
+function say(s, cls) { log.push(cls ? `<span class="${cls}">${s}</span>` : s); }
+
+/* ---------------- GPU ---------------- */
+let gl, cv, prog, loc, vao, fboTex, fbo;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+function initGL() {
+  cv = document.createElement('canvas');
+  gl = cv.getContext('webgl2', { premultipliedAlpha:false, antialias:false, preserveDrawingBuffer:true });
+  if (!gl) throw new Error('no webgl2');
+  prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.bindAttribLocation(prog, 0, 'a_pos');
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  loc = {
+    tex: gl.getUniformLocation(prog,'u_tex'), srcSize: gl.getUniformLocation(prog,'u_srcSize'),
+    dstSize: gl.getUniformLocation(prog,'u_dstSize'), dir: gl.getUniformLocation(prog,'u_dir'),
+    scale: gl.getUniformLocation(prog,'u_scale'),
+    kernel: gl.getUniformLocation(prog,'u_kernel'),
+  };
+  vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  fboTex = gl.createTexture(); fbo = gl.createFramebuffer();
+}
+
+function clampTex() {
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+}
+
+function pass(srcTex, sw, sh, dw, dh, dx, dy, target, kernel) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+  gl.viewport(0,0,dw,dh);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  gl.uniform1i(loc.tex,0);
+  gl.uniform2f(loc.srcSize, sw, sh);
+  gl.uniform2f(loc.dstSize, dw, dh);
+  gl.uniform2f(loc.dir, dx, dy);
+  gl.uniform1f(loc.scale, dx ? dw/sw : dh/sh);
+  gl.uniform1i(loc.kernel, kernel|0);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+}
+
+// NOTE: source is a canvas whose row 0 is the TOP row. UNPACK_FLIP_Y is on, to
+// match the userscript, and readPixels returns bottom-up, so we flip back.
+let halfFloatOK = false;
+
+function gpuResample(srcCanvas, sw, sh, dw, dh, useHalfFloat, kernel) {
+  cv.width = dw; cv.height = dh;
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t); clampTex();
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE, srcCanvas);
+
+  gl.bindTexture(gl.TEXTURE_2D, fboTex); clampTex();
+  // Lanczos overshoots past 0 and 255 on hard edges. An RGBA8 intermediate
+  // clamps that overshoot away between the two passes; RGBA16F keeps it.
+  if (useHalfFloat) {
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,dw,sh,0,gl.RGBA,gl.HALF_FLOAT,null);
+  } else {
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,dw,sh,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+
+  gl.useProgram(prog); gl.bindVertexArray(vao);
+  pass(t, sw, sh, dw, sh, 1, 0, fbo, kernel);
+  pass(fboTex, dw, sh, dw, dh, 0, 1, null, kernel);
+  gl.deleteTexture(t);
+
+  const err = gl.getError();
+  if (err !== gl.NO_ERROR) throw new Error('GL error ' + err);
+
+  const buf = new Uint8Array(dw*dh*4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.readPixels(0,0,dw,dh,gl.RGBA,gl.UNSIGNED_BYTE,buf);
+  // readPixels is bottom-up; flip to top-down to compare with the CPU result.
+  const out = new Uint8Array(dw*dh*4);
+  for (let y=0;y<dh;y++) out.set(buf.subarray((dh-1-y)*dw*4, (dh-y)*dw*4), y*dw*4);
+  return out;
+}
+
+/* ---------------- CPU reference ---------------- */
+const A = 3;
+const sinc = x => Math.abs(x) < 1e-6 ? 1 : Math.sin(Math.PI*x)/(Math.PI*x);
+const lanczos3 = x => { x = Math.abs(x); return x >= A ? 0 : sinc(x)*sinc(x/A); };
+
+function cpuPass(src, sw, sh, dw, dh, horiz) {
+  const out = new Float32Array(dw*dh*4);
+  const scale = horiz ? dw/sw : dh/sh;
+  const nSrc = horiz ? sw : sh, nDst = horiz ? dw : dh;
+  const fs = Math.max(1, 1/scale), support = A*fs;
+  const taps = [];
+  for (let d=0; d<nDst; d++) {
+    const sp = (d+0.5)/scale;
+    const j0 = Math.floor(sp - support - 0.5), j1 = Math.ceil(sp + support - 0.5);
+    const ws = []; let tot = 0;
+    for (let j=j0; j<=j1; j++) {
+      const w = lanczos3((sp - (j+0.5))/fs);
+      if (w === 0) continue;
+      ws.push([Math.min(Math.max(j,0), nSrc-1), w]); tot += w;
+    }
+    taps.push([ws, tot]);
+  }
+  for (let y=0;y<dh;y++) for (let x=0;x<dw;x++) {
+    const [ws, tot] = taps[horiz ? x : y];
+    let r=0,g=0,b=0,a=0;
+    for (const [j,w] of ws) {
+      const sx = horiz ? j : x, sy = horiz ? y : j;
+      const i = (sy*sw + sx)*4;
+      r+=w*src[i]; g+=w*src[i+1]; b+=w*src[i+2]; a+=w*src[i+3];
+    }
+    const o = (y*dw+x)*4;
+    out[o]=r/tot; out[o+1]=g/tot; out[o+2]=b/tot; out[o+3]=a/tot;
+  }
+  return out;
+}
+
+function cpuResample(srcData, sw, sh, dw, dh) {
+  const f = Float32Array.from(srcData);
+  const mid = cpuPass(f, sw, sh, dw, sh, true);
+  const dst = cpuPass(mid, dw, sh, dw, dh, false);
+  const out = new Uint8Array(dw*dh*4);
+  for (let i=0;i<out.length;i++) out[i] = Math.max(0, Math.min(255, Math.round(dst[i])));
+  return out;
+}
+
+function cpuNearest(src, sw, sh, dw, dh) {
+  const out = new Uint8Array(dw*dh*4);
+  for (let y=0;y<dh;y++) for (let x=0;x<dw;x++) {
+    const sx = Math.min(sw-1, Math.max(0, Math.floor((x+0.5)*sw/dw)));
+    const sy = Math.min(sh-1, Math.max(0, Math.floor((y+0.5)*sh/dh)));
+    const i=(sy*sw+sx)*4, o=(y*dw+x)*4;
+    out[o]=src[i]; out[o+1]=src[i+1]; out[o+2]=src[i+2]; out[o+3]=src[i+3];
+  }
+  return out;
+}
+
+/* ---------------- harness ---------------- */
+function makeSource(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  const d = x.createImageData(w, h);
+  for (let y=0;y<h;y++) for (let px=0;px<w;px++) {
+    const i = (y*w+px)*4;
+    const checker = ((px + y) % 2) * 255;            // 1px checkerboard
+    const stripe  = (px % 3 === 0) ? 0 : 255;        // 1px vertical lines
+    const ramp    = Math.round(255*px/(w-1));
+    d.data[i]   = checker;
+    d.data[i+1] = stripe;
+    d.data[i+2] = ramp;
+    d.data[i+3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  return { canvas: c, data: d.data };
+}
+
+function diff(a, b) {
+  let sum = 0, max = 0, n = 0;
+  for (let i=0;i<b.length;i++) {
+    if (i % 4 === 3) continue;                        // skip alpha
+    const d = Math.abs(a[i] - b[i]); sum += d; if (d > max) max = d; n++;
+  }
+  return { mean: sum/n, max };
+}
+
+function compare(label, sw, sh, dw, dh) {
+  const { canvas, data } = makeSource(sw, sh);
+  const c = cpuResample(data, sw, sh, dw, dh);
+
+  const g8 = gpuResample(canvas, sw, sh, dw, dh, false, 0);
+  const d8 = diff(g8, c);
+
+  let g = g8, best = d8, note = 'rgba8';
+  if (halfFloatOK) {
+    const g16 = gpuResample(canvas, sw, sh, dw, dh, true, 0);
+    const d16 = diff(g16, c);
+    say(`      ${label.padEnd(28)} ${sw}x${sh} -> ${dw}x${dh}   ` +
+        `rgba8: mean=${d8.mean.toFixed(3)} max=${String(d8.max).padStart(3)}   ` +
+        `rgba16f: mean=${d16.mean.toFixed(3)} max=${String(d16.max).padStart(3)}`);
+    g = g16; best = d16; note = 'rgba16f';
+  }
+
+  const ok = best.mean < 1.0 && best.max <= 3;
+  say(`${ok ? 'PASS' : 'FAIL'}  ${label.padEnd(28)} best (${note}): mean|d|=${best.mean.toFixed(3)}  max|d|=${best.max}`,
+      ok ? 'pass' : 'fail');
+
+  // Visual: show the GPU result so a flip/offset error is obvious by eye.
+  const vc = document.createElement('canvas');
+  vc.width = dw; vc.height = dh;
+  const vx = vc.getContext('2d');
+  const id = vx.createImageData(dw, dh);
+  id.data.set(g);
+  vx.putImageData(id, 0, 0);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `<div>${label}</div>`;
+  wrap.appendChild(vc);
+  document.getElementById('vis').appendChild(wrap);
+  return ok;
+}
+
+// Nearest must be pixel-exact at whole-number factors. At fractional factors the
+// source coordinate can land exactly on a pixel boundary, where float32 in the
+// shader and float64 in JS round to different neighbours. Those ties are not
+// errors - either neighbour is a valid nearest sample - so the test allows them
+// and fails on any disagreement away from a boundary.
+function compareNearest(label, sw, sh, dw, dh) {
+  const { canvas, data } = makeSource(sw, sh);
+  const g = gpuResample(canvas, sw, sh, dw, dh, false, 1);
+  const c = cpuNearest(data, sw, sh, dw, dh);
+
+  const EPS = 1e-3;
+  const nearBoundary = (v) => { const f = v - Math.floor(v); return f < EPS || f > 1 - EPS; };
+
+  let differing = 0, offBoundary = 0;
+  for (let y = 0; y < dh; y++) for (let x = 0; x < dw; x++) {
+    const o = (y*dw + x)*4;
+    if (g[o] === c[o] && g[o+1] === c[o+1] && g[o+2] === c[o+2]) continue;
+    differing++;
+    const tie = nearBoundary((x + 0.5)*sw/dw) || nearBoundary((y + 0.5)*sh/dh);
+    if (!tie) offBoundary++;
+  }
+
+  const pct = (differing/(dw*dh)*100).toFixed(2);
+  const ok = offBoundary === 0;
+  say(`${ok ? 'PASS' : 'FAIL'}  ${label.padEnd(28)} ${sw}x${sh} -> ${dw}x${dh}   ` +
+      `differing=${pct}%  of which off-boundary=${offBoundary}`,
+      ok ? 'pass' : 'fail');
+  return ok;
+}
+
+try {
+  initGL();
+  say('WebGL2 OK — ' + gl.getParameter(gl.VERSION));
+  halfFloatOK = !!(gl.getExtension('EXT_color_buffer_half_float') ||
+                   gl.getExtension('EXT_color_buffer_float'));
+  say('RGBA16F render target: ' + (halfFloatOK ? 'available' : 'NOT available'),
+      halfFloatOK ? 'pass' : 'fail');
+  say('');
+  let all = true;
+  all &= compare('2.276x  (fill width)',       64, 48, 146, 109);
+  all &= compare('2.000x  (integer)',          64, 48, 128, 96);
+  all &= compare('1.138x  (spread fit width)', 64, 48, 73, 55);
+  all &= compare('0.640x  (downscale)',        64, 48, 41, 31);
+  all &= compare('asymmetric',                 50, 30, 137, 61);
+  say('');
+  say('nearest kernel (GPU) vs a CPU nearest reference:');
+  all &= compareNearest('nearest 2.000x', 64, 48, 128, 96);
+  all &= compareNearest('nearest 2.276x', 64, 48, 146, 109);
+  all &= compareNearest('nearest asym',   50, 30, 137, 61);
+  say('');
+  say(all ? 'ALL PASS — shader matches the reference filter.'
+          : 'FAILURES — shader and reference disagree.', all ? 'pass' : 'fail');
+} catch (e) {
+  say('EXCEPTION: ' + e.message, 'fail');
+}
+document.getElementById('out').innerHTML = log.join('\n');
+</script>

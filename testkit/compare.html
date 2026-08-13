@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>crisp-images test harness</title>
+<style>
+  html, body { margin: 0; background: #1a1a1a; color: #ddd;
+               font: 14px/1.5 Consolas, monospace; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; padding: 6px 10px;
+         background: rgba(0,0,0,.8); z-index: 10; }
+  #bar button { font: inherit; margin-right: 6px; }
+  #stage { padding-top: 68px; text-align: center; }
+  #stage img { display: block; margin: 0 auto; }
+  #drop { padding: 60px; border: 2px dashed #555; margin: 60px auto; max-width: 600px; }
+</style>
+
+<div id="bar">
+  <button data-src="dpi-test-1125x1600-mangapage.png">1125&times;1600 (single page)</button>
+  <button data-src="dpi-test-2560x3840-PORTRAIT-NATIVE.png">2560&times;3840 (native)</button>
+  <button data-src="dpi-test-1280x1920-portrait-logical.png">1280&times;1920 (logical)</button>
+  <input type="file" id="file" accept="image/*">
+  <span id="info"></span>
+  <div style="margin-top:6px">
+    drawn here, works on <code>file://</code> too:
+    <button data-gen="1125x1600">1125&times;1600</button>
+    <button data-gen="2560x3840">2560&times;3840</button>
+    <button data-gen="1280x1920">1280&times;1920</button>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="drop">Drop an image here, or pick one above.</div>
+</div>
+
+<script>
+  // Chrome renders a bare image URL as an "image document" with its own
+  // shrink-to-fit and click-to-zoom, which fights the userscript and changes the
+  // picture without the overlay knowing. This page is an ordinary document, so
+  // the <img> below behaves like one on a real site - which is what you want to
+  // be testing against.
+  const stage = document.getElementById('stage');
+  const info = document.getElementById('info');
+
+  function show(src, label) {
+    stage.innerHTML = '';
+    const img = new Image();
+    img.onload = () => {
+      info.textContent = `  ${img.naturalWidth}x${img.naturalHeight}  ${label || ''}`;
+    };
+    img.src = src;
+    stage.appendChild(img);
+  }
+
+  // A dropped file becomes a data: URL rather than a blob: URL. On a file:// page
+  // a blob: URL inherits the page's opaque origin and still taints the canvas, so
+  // the GPU resample would be refused. data: URLs never taint, anywhere.
+  function showFile(f) {
+    const r = new FileReader();
+    r.onload = () => show(r.result, f.name);
+    r.readAsDataURL(f);
+  }
+
+  // A canvas the page drew itself is never tainted, whatever the page's own origin, so
+  // toDataURL works even on file:// - where a sibling PNG cannot be made readable at
+  // all. This is not a copy of tools/make_test_image.py; it is a smaller pattern with
+  // the features that actually discriminate resamplers, kept short on purpose so there
+  // is no second generator to keep in step.
+  function generate(w, h) {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#000';
+
+    // Six panels on a 2x3 grid, sized to fill the frame: a pattern that only occupies
+    // the top of a 1600 px page tells you nothing about the rest of it.
+    const cols = 2, rows = 3, pad = Math.round(w * 0.04);
+    const top = Math.round(h * 0.10), bottom = Math.round(h * 0.02), lab = 26;
+    const cw = Math.floor((w - pad * (cols + 1)) / cols);
+    const ch = Math.floor((h - top - bottom - rows * (lab + pad)) / rows);
+    let n = 0;
+    const cell = () => {
+      const x = pad + (n % cols) * (cw + pad);
+      const y = top + Math.floor(n / cols) * (ch + pad + lab) + lab;
+      n++;
+      return [x, y];
+    };
+    const label = (x, y, t) => {
+      g.font = '16px monospace'; g.fillStyle = '#000';
+      g.fillText(t, x, y - 6);
+      g.strokeStyle = '#000'; g.lineWidth = 1;
+      g.strokeRect(x + 0.5, y + 0.5, cw, ch);
+    };
+
+    // 1 px checkerboard - the worst case for nearest at a fractional factor
+    let [x, y] = cell(); label(x, y, '1px checkerboard');
+    for (let j = 0; j < ch; j++) for (let i = (j & 1); i < cw; i += 2) g.fillRect(x + i, y + j, 1, 1);
+
+    // 1 px vertical then horizontal stripes - shows dropped and doubled rows
+    [x, y] = cell(); label(x, y, '1px stripes, vertical');
+    for (let i = 0; i < cw; i += 2) g.fillRect(x + i, y, 1, ch);
+    [x, y] = cell(); label(x, y, '1px stripes, horizontal');
+    for (let j = 0; j < ch; j += 2) g.fillRect(x, y + j, cw, 1);
+
+    // hairline diagonals - where nearest staircases and a good filter does not
+    [x, y] = cell(); label(x, y, 'diagonal hairlines');
+    g.save(); g.beginPath(); g.rect(x, y, cw, ch); g.clip();
+    g.lineWidth = 1; g.strokeStyle = '#000';
+    for (let i = -ch; i < cw; i += 6) { g.beginPath(); g.moveTo(x + i + 0.5, y); g.lineTo(x + i + ch + 0.5, y + ch); g.stroke(); }
+    g.restore();
+
+    // screentone dots - the first thing to moire or smear
+    [x, y] = cell(); label(x, y, 'screentone, 4px pitch');
+    for (let j = 2; j < ch; j += 4) for (let i = 2; i < cw; i += 4) g.fillRect(x + i, y + j, 1, 1);
+
+    // smooth ramp - ringing and overshoot show up here, not on the line art
+    [x, y] = cell(); label(x, y, 'gradient (ringing)');
+    const grad = g.createLinearGradient(x, 0, x + cw, 0);
+    grad.addColorStop(0, '#000'); grad.addColorStop(1, '#fff');
+    g.fillStyle = grad; g.fillRect(x, y, cw, ch); g.fillStyle = '#000';
+
+    // 1 px frame at the very edge: a hairline at 1:1, and obviously wrong if not
+    g.strokeStyle = '#000'; g.lineWidth = 1;
+    g.strokeRect(0.5, 0.5, w - 1, h - 1);
+    g.font = `bold ${Math.max(20, Math.round(w / 45))}px monospace`;
+    g.fillText(`${w} x ${h} - generated in page`, pad, Math.round(h * 0.07));
+    return cv.toDataURL('image/png');
+  }
+
+  for (const b of document.querySelectorAll('#bar button')) {
+    if (b.dataset.gen) {
+      const [w, h] = b.dataset.gen.split('x').map(Number);
+      b.addEventListener('click', () => show(generate(w, h), `${w}x${h} generated`));
+    } else {
+      b.addEventListener('click', () => show(b.dataset.src, b.dataset.src));
+    }
+  }
+
+  document.getElementById('file').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) showFile(f);
+  });
+
+  addEventListener('dragover', (e) => e.preventDefault());
+  addEventListener('drop', (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f) showFile(f);
+  });
+
+  if (location.protocol === 'file:') {
+    const warn = document.createElement('div');
+    warn.style.cssText =
+      'background:#5a2d00;color:#ffd9a0;padding:10px 14px;margin:40px auto 0;' +
+      'max-width:900px;border-radius:6px;text-align:left';
+    warn.innerHTML =
+      '<b>You are on file://</b> — Chrome treats every local file as its own opaque ' +
+      'origin, so the userscript\'s GPU resample is <b>impossible</b> for the preset ' +
+      'buttons above (they load file:// URLs). Two ways round it:' +
+      '<ul><li>Run <code>serve.cmd</code> in the <code>hidpi-manga</code> folder, then open ' +
+      '<code>http://localhost:8000/testkit/compare.html</code> — everything works, and it ' +
+      'matches how MangaDex actually behaves.</li>' +
+      '<li>Or use the <b>drawn here</b> buttons — the page draws those into a canvas ' +
+      'itself, and a canvas the page filled is never tainted, so they work on file://. ' +
+      'Same sizes, a smaller pattern.</li>' +
+      '<li>Or drop a file / use the picker above — those are converted to data: URLs, ' +
+      'which never taint, so they work even here.</li></ul>';
+    document.body.appendChild(warn);
+  }
+</script>
