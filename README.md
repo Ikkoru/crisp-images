@@ -91,7 +91,7 @@ To restrict to specific website, manually change `@match`.
 You can use [testkit/compare.html](https://github.com/Ikkoru/crisp-images/tree/main/testkit) to compare the test images in the same folder, or an image of your own choosing.
 
 <p align="left">
-**Text crop:**
+<strong>Text crop:</strong>
 
 
 Lanczos3:<br>
@@ -103,7 +103,7 @@ Bilinear (browser):<br>
 Nearest Neighbour:<br>
 <img src="comparisons/text_fit-screen_nearest_2530x3598.png" alt="Nearest Neighbour">
 
-**Line Art crop:**
+<strong>Line Art crop:</strong>
 
 
 Lanczos3:<br>
