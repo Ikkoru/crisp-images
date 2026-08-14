@@ -28,7 +28,7 @@ Built for reading manga and comics. Works on any image, [anywhere](https://githu
 | `Alt+H`                             | Show or hide the info overlay. Remembered per site                                        |
 | `Alt+M`                             | Size: fit the window width → biggest whole-number zoom → one image pixel per screen pixel |
 | `Alt+Q`                             | Filter: Lanczos3 → nearest → browser. Same size each time, so you can compare             |
-| `Alt+P`                             | Turn on or off for this site. Remembered per site                                         |
+| `Alt+P`                             | Turn on or off for the site you're on. Remembered per site                                |
 | `Alt` + left click<br/>on an image  | Show that one image at one image pixel per screen pixel                                   |
 | `Alt` + right click<br/>on an image | Show that one image at twice its own resolution                                           |
 | `Alt+G`                             | Show or hide the overlay's diagnostic rows (size, factor, status, memory)                 |
@@ -93,7 +93,6 @@ You can use [testkit/compare.html](https://github.com/Ikkoru/crisp-images/tree/m
 <p align="left">
 <strong>Text crop:</strong>
 
-
 Lanczos3:<br>
 <img src="comparisons/text_fit-screen_lanczos3_2530x3598.png" alt="Lanczos3">
 
@@ -104,7 +103,6 @@ Nearest Neighbour:<br>
 <img src="comparisons/text_fit-screen_nearest_2530x3598.png" alt="Nearest Neighbour">
 
 <strong>Line Art crop:</strong>
-
 
 Lanczos3:<br>
 <img src="comparisons/bw_fit-screen_lanczos3_2530x3598.png" alt="Lanczos3">
