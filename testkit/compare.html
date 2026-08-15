@@ -154,8 +154,9 @@
     warn.innerHTML =
       '<b>You are on file://</b> — Chrome treats every local file as its own opaque ' +
       'origin, so the userscript\'s GPU resample is <b>impossible</b> for the preset ' +
-      'buttons above (they load file:// URLs). Two ways round it:' +
-      '<ul><li>Run <code>serve.cmd</code> in the <code>hidpi-manga</code> folder, then open ' +
+      'buttons above (they load file:// URLs). Three ways round it:' +
+      '<ul><li>Serve this repo over http (<code>python -m http.server 8000</code> in the ' +
+      'repo root will do), then open ' +
       '<code>http://localhost:8000/testkit/compare.html</code> — everything works, and it ' +
       'matches how MangaDex actually behaves.</li>' +
       '<li>Or use the <b>drawn here</b> buttons — the page draws those into a canvas ' +
