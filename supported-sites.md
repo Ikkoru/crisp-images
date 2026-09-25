@@ -18,7 +18,7 @@ These load and resize, but something about the site limits what the script can d
 | E-Hentai    | https://e-hentai.org/             | Yes   | Sizing only | **Lanczos3 cannot run here**: pages come from a separate host that does not let scripts read them, so the browser blocks any userscript from resampling them. `nearest` still works. Since 4.0 the image fills the whole width, without the thin gaps at its sides. Since 4.1 the multi-page viewer does too: its image pane is stretched over the last 2-3 px while the thumbnail pane is closed |
 | ExHentai    | https://exhentai.org/             | Yes   | Sizing only | Same as E-Hentai: same site software |
 | Tapas       | https://tapas.io/                 | No    | Yes | Since 4.0 the page fills the width instead of sitting in a narrow column with empty bars at both sides, and stays clear of the side panel when it is open. Lanczos3 works: Tapas's image host allows it |
-| WEBTOON     | https://www.webtoons.com/         | No    | Since 4.1 | Its 700 px strips pass the size filter since 4.1 (it was 800), and fill the whole width: the site's column clipped them 67-100 px short of each edge. Also fixed: a strip could stay "skipped - 1x1" (the site's placeholder) until you scrolled or pressed a key |
+| WEBTOON     | https://www.webtoons.com/         | No    | Since 4.1 | Its 700 px strips pass the size filter since 4.1 (it was 800), and fill the whole width: the site's column clipped them 67-100 px short of each edge. Also fixed: a strip could stay "skipped - 1x1" (the site's placeholder) until you scrolled or pressed a key. Since 4.2, `native` mode is no longer squashed: the site's minimum width for strips used to override the script's |
 
 ## Doesn't work on
 
