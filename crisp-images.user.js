@@ -6,7 +6,7 @@
 // @name:es           Crisp Images - corrige imágenes borrosas en pantallas HiDPI / 4K
 // @name:pt-BR        Crisp Images - corrige imagens borradas em telas HiDPI / 4K
 // @namespace    https://github.com/Ikkoru/crisp-images
-// @version      3.19
+// @version      4.0
 // @description  Images look blurry on a 4K/HiDPI screen over 100% display scaling, or on Retina? The browser upscales them with a cheap bilinear filter. This resamples them with a real Lanczos3 filter on the GPU instead. No third-party requests; nothing leaves your browser. Built for manga, comics, and webtoons, works anywhere.
 // @description:ja    4KやHiDPIディスプレイで、表示スケールが100%を超えるときやRetina環境で、画像がぼやけて見えませんか？ブラウザは安価なバイリニア補間で拡大しています。このスクリプトはGPU上で本物のLanczos3フィルターを使って再サンプリングし、くっきり表示します。第三者への通信は一切なし。漫画・コミック向けですが、どんな画像にも使えます。
 // @description:zh-CN 在4K或高DPI屏幕上、缩放高于100%时，或在Retina屏上，图片看起来模糊？浏览器用廉价的双线性插值放大它们。本脚本改用GPU上真正的Lanczos3滤镜重新采样。无第三方请求，数据不会离开浏览器。为漫画阅读而生，适用于任何图片。
@@ -148,7 +148,7 @@
   // can see whether Tampermonkey runs the copy you just edited.
   // KEEP IN STEP WITH @version ABOVE. Under `@grant none` a script cannot read its own
   // header (GM_info needs a grant), so this is kept by hand.
-  const VERSION = '3.19';
+  const VERSION = '4.0';
 
   const dpr = () => window.devicePixelRatio || 1;
 
