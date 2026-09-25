@@ -6,7 +6,7 @@
 // @name:es           Crisp Images - corrige imágenes borrosas en pantallas HiDPI / 4K
 // @name:pt-BR        Crisp Images - corrige imagens borradas em telas HiDPI / 4K
 // @namespace    https://github.com/Ikkoru/crisp-images
-// @version      3.18
+// @version      3.19
 // @description  Images look blurry on a 4K/HiDPI screen over 100% display scaling, or on Retina? The browser upscales them with a cheap bilinear filter. This resamples them with a real Lanczos3 filter on the GPU instead. No third-party requests; nothing leaves your browser. Built for manga, comics, and webtoons, works anywhere.
 // @description:ja    4KやHiDPIディスプレイで、表示スケールが100%を超えるときやRetina環境で、画像がぼやけて見えませんか？ブラウザは安価なバイリニア補間で拡大しています。このスクリプトはGPU上で本物のLanczos3フィルターを使って再サンプリングし、くっきり表示します。第三者への通信は一切なし。漫画・コミック向けですが、どんな画像にも使えます。
 // @description:zh-CN 在4K或高DPI屏幕上、缩放高于100%时，或在Retina屏上，图片看起来模糊？浏览器用廉价的双线性插值放大它们。本脚本改用GPU上真正的Lanczos3滤镜重新采样。无第三方请求，数据不会离开浏览器。为漫画阅读而生，适用于任何图片。
@@ -44,79 +44,84 @@
    * Config START.
    * ================================================================== */
 
-    // Whether the script is active on all websites by default.
-    // Alt+P activates/deactivates it. Its on or off state is remembered per site
-    // and overrides this setting, so switching it on somewhere keeps it on there.
-    // Switching it off will keep it off as well.
-    // false: the script starts out inactive on all sites.
-    // true:  the script starts out active on all sites. Not recommended.
+    // Start switched on for every site?
+    // false: off everywhere until you switch it on for a site (Alt+P).
+    // true:  on everywhere. Not recommended.
+    // Either way, switching a site on or off is remembered and wins over this.
     enabledOnStart: false,
 
-    // Whether the overlay starts visible. Alt+H toggles it, and that choice is
-    // remembered per site and overrides this.
+    // Show the overlay when a page opens? Alt+H toggles it, remembered per site.
     hudOnStart: true,
 
-    // Whether the overlay's diagnostic rows start visible. Alt+G toggles them.
-    // Unlike Alt+P and Alt+H this is NOT remembered per site: it is one preference
-    // for every site, so this line is where you set it. Alt+G lasts until reload.
+    // Show the overlay's diagnostic rows when a page opens? Alt+G toggles them until
+    // the page reloads. Not remembered per site, so set it here.
     detailsOnStart: false,
 
-    // An image is only touched if it is at least this wide AND at least this
-    // tall. Falling short on either one leaves it alone, which is what keeps
-    // avatars, icons, and banners out.
+    // Leave an image alone unless it is at least this wide AND this tall, in image
+    // pixels. Keeps avatars, icons and banners out.
     minNaturalWidth: 800,
     minNaturalHeight: 1066,
 
-    // How big to draw an image:
-    //   'fit-width' - as wide as the window
-    //   'integer'   - biggest whole-number zoom that still fits the width (2x, 3x...)
+    // How big to draw images:
+    //   'fit-width' - fill the width (fitWidth below says which width)
+    //   'integer'   - the biggest whole-number zoom (2x, 3x...) that fits that width
     //   'native'    - one image pixel per screen pixel
-    // A single image can be overridden by clicking it, without changing this:
-    //   Alt + left click  - 'native' for that one image
-    //   Alt + right click - twice that image's own resolution
-    // Click again to put it back.
+    // Single images can be switched with a click; see the shortcuts at the bottom.
     mode: 'fit-width',
 
-    // Which resampler to use by default:
-    //   'lanczos3' - best quality of these three. Not for pixel art
-    //   'nearest'  - hard pixel edges. Use for pixel art. Warning:
-    //                Only exact at whole-number zooms: use integer mode
-    //   'browser'  - leave it to Chrome; blurry, but fast
+    // Which filter to resample with:
+    //   'lanczos3' - sharpest and cleanest. Not for pixel art.
+    //   'nearest'  - hard pixel edges, for pixel art. Only even at whole-number zooms,
+    //                so pair it with 'integer'.
+    //   'browser'  - the browser's own scaling: soft, but costs nothing.
     quality: 'lanczos3',
 
-    // Applies to 'fit-width' and 'integer'.
-    // false: fit the width only, so a tall page runs off the bottom and you scroll.
-    // true:  fit the height as well, so the whole image is on screen at once.
+    // What "fit width" fills. 'integer' mode fits into the same width.
+    //   'space'     - all the free width beside the image, up to the window's edges.
+    //                 Never covers a sidebar, a panel or text next to the image, and
+    //                 never goes past an edge that would cut it off. Nothing on the page
+    //                 moves sideways; what is below moves down as the image grows.
+    //   'container' - only the box the page gives the image. Keeps the page's margins,
+    //                 so a narrow centred column leaves empty bars at both sides.
+    //   'window'    - the window's width, wherever the image sits. Can run off the
+    //                 right edge. How it worked before v3.18.
+    // Where the image's box sizes itself to fit its contents, all three use the window.
+    fitWidth: 'space',
+
+    // false: fit the width only; tall pages run off the bottom and you scroll.
+    // true:  fit the height too, so the whole image is on screen at once.
     fitHeightToo: false,
 
-    // Upper limit on the resampled image, in pixels (64 megapixels). Anything
-    // larger is handed back to the browser rather than eating memory.
+    // Largest image to resample, in pixels (64 megapixels). Bigger ones are left to
+    // the browser.
     maxOutputPixels: 64e6,
 
-    // How much memory to spend keeping resampled images around, in bytes
-    // (64 MB). Keeping them makes switching filters or scrolling back instant;
-    // past this the oldest are dropped and redone if you return to them. Images
-    // on screen are never dropped, so this is a target rather than a hard
-    // ceiling. All of it is freed when you leave the page.
-    //
-    // The same budget covers the copies kept of originals on sites that hand out
-    // image data once and then release it - see sourceUrl() further down. Those are
-    // never dropped while their image is on the page, because on such a site the copy
-    // is the only one left.
+    // Memory for keeping resampled images, in bytes (64 MB), so switching filters or
+    // scrolling back is instant. Past it the oldest go, and are redone if you come back.
+    // Images on screen are never dropped, so it can go a little over. Everything is
+    // freed when you leave the page. This also holds the copies kept on sites that take
+    // their image data back after loading (MangaPlus); those stay while their image does.
     blobBudget: 64e6,
 
-    // How far beyond the window to prepare images so they are ready before you
-	// scroll to them. Measured in screenfuls above/below/left/right.
+    // How far outside the window to get images ready, in screenfuls in every direction,
+    // so they are done before you scroll to them.
     lazyMargin: 1.5,
 
-    // What "fit width" measures against.
-    // true:  the box the page actually gives the image, when that is narrower than the
-    //        window - so a sidebar, a thumbnail pane, a centred column or a wrapper's
-    //        own border no longer pushes part of the image out of sight. Falls back to
-    //        the window whenever that box's width depends on what is inside it, since
-    //        measuring it there would feed our own answer back in.
-    // false: always the window, as before v3.18.
-    fitContainer: true,
+    // Shortcuts. The overlay shows whatever you set here. '' switches one off.
+    //   Keys:   modifiers, then a key, joined by '+':  'Alt+P', 'Ctrl+Shift+K', 'F2'.
+    //           Modifiers are Alt (Option on a Mac), Ctrl, Shift and Meta (Cmd on a Mac).
+    //           Letters and digits also work on non-Latin keyboard layouts.
+    //   Clicks: modifiers, then LeftClick, RightClick or MiddleClick: 'Alt+LeftClick'.
+    //           They act on the image under the pointer, even through a page's click
+    //           overlay. Click the same way again to undo.
+    // Keys do nothing while you are typing in a text field.
+    keyToggle:   'Alt+P',           // switch the script on or off for this site
+    keyMode:     'Alt+M',           // next mode: fit-width, integer, native
+    keyQuality:  'Alt+Q',           // next filter: lanczos3, nearest, browser
+    keyOverlay:  'Alt+H',           // show or hide the overlay
+    keyDetails:  'Alt+G',           // show or hide the overlay's diagnostic rows
+    clickNative: 'Alt+LeftClick',   // this image at one image pixel per screen pixel
+    clickDouble: 'Alt+RightClick',  // this image at twice its own resolution
 
   /* ================================================================== *
    * Config END.
@@ -152,7 +157,7 @@
   // metadata under `@grant none`: GM_info only exists once something is granted, and
   // granting anything moves the script into the sandbox and costs the page-reachable
   // window.__crispImages handle. A hand-kept constant is the cheaper trade.
-  const VERSION = '3.18';
+  const VERSION = '3.19';
 
   const dpr = () => window.devicePixelRatio || 1;
 
@@ -168,6 +173,7 @@
   const GL = (() => {
     let cv = null, gl = null, prog = null, loc = null, vao = null;
     let fboTex = null, fbo = null, broken = false, why = '', halfFloat = false;
+    let maxDim = 0;
 
     const VERT = `#version 300 es
 in vec2 a_pos;
@@ -265,6 +271,15 @@ void main() {
         halfFloat = !!(gl.getExtension('EXT_color_buffer_half_float') ||
                        gl.getExtension('EXT_color_buffer_float'));
 
+        // The largest side this GPU will draw or sample, whichever limit bites first. Ask
+        // for a bigger canvas and WebGL does not refuse - it quietly hands back a smaller
+        // drawing buffer, and the whole image is then squashed into it. Measured: a
+        // 2560x9600 output came back as 2560x8192 with every row there, just compressed,
+        // then stretched back out by the browser. Twice resampled and labelled Lanczos3.
+        const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+        maxDim = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),
+                          gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), vp[0], vp[1]);
+
         prog = gl.createProgram();
         gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
         gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
@@ -328,6 +343,13 @@ void main() {
 
       cv.width = dstW;
       cv.height = dstH;
+      // The limits above are what the GPU advertises; memory pressure can still make the
+      // browser allocate less. Either way the result would be squashed, so check what we
+      // actually got rather than trusting what we asked for.
+      if (gl.drawingBufferWidth !== dstW || gl.drawingBufferHeight !== dstH) {
+        throw tooLarge(`the GPU gave a ${gl.drawingBufferWidth}x${gl.drawingBufferHeight} ` +
+                       `buffer for a ${dstW}x${dstH} image`);
+      }
 
       const srcTex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, srcTex);
@@ -358,8 +380,19 @@ void main() {
       return cv;
     }
 
-    return { resample, ok: () => init(), why: () => why, precision: () => (halfFloat ? '16f' : '8bit') };
+    return {
+      resample, ok: () => init(), why: () => why, precision: () => (halfFloat ? '16f' : '8bit'),
+      maxDim: () => (init() ? maxDim : 0),
+    };
   })();
+
+  // A limit of the machine or the format, not a failure: the image is left to the browser's
+  // own scaling, with a status that says why, exactly as for a host that refuses CORS.
+  function tooLarge(msg) {
+    const e = new Error(msg);
+    e.tooLarge = true;
+    return e;
+  }
 
   /* ================================================================== *
    * Geometry
@@ -407,19 +440,113 @@ void main() {
     return true;
   }
 
-  // Width to fit into, in device px: the window, or the narrower box the page actually
-  // gives this image. Never wider than the window - a container reported as wider is a
-  // horizontal scroller or something misread, and the window is the honest ceiling.
-  function availableDevice(img, vp) {
-    if (!CFG.fitContainer || !img) return vp.w;
-    const el = containingBlock(img);
-    if (!el) return vp.w;
-    const cs = getComputedStyle(el);
-    if (!widthComesFromParent(el, cs)) return vp.w;
-    const content = el.clientWidth
-      - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    if (!(content > 0)) return vp.w;
-    return Math.max(1, Math.min(vp.w, Math.floor(content * vp.r)));
+  // Does this box cut off whatever sticks out of its sides? The body's overflow is handed
+  // to the viewport unless the root sets its own, and the body itself then clips nothing.
+  function clips(el, cs) {
+    if (cs.overflowX === 'visible' && !/paint|strict|content/.test(cs.contain)) return false;
+    if (el === document.body &&
+        getComputedStyle(document.documentElement).overflowX === 'visible') return false;
+    return true;
+  }
+
+  // The column an image sits in, and everything that could stand beside it. Shared by
+  // every image in the same containing block, so it is measured once per burst of work
+  // rather than once per image: see layoutOf.
+  //
+  // `boxes` are the other children of every ancestor on the way up - the only things that
+  // can sit beside the column - that do not straddle its centre line: whatever spans the
+  // centre is above, below or on top of the image, and never limits how wide it can be.
+  // The climb stops at the first ancestor that clips, since nothing past its edges would
+  // be seen anyway.
+  function measureColumn(cb) {
+    const cs = getComputedStyle(cb);
+    if (!widthComesFromParent(cb, cs)) return null;
+    const r = cb.getBoundingClientRect();
+    const left = r.left + cb.clientLeft;
+    const cbL = left + (parseFloat(cs.paddingLeft) || 0);
+    const cbR = left + cb.clientWidth - (parseFloat(cs.paddingRight) || 0);
+    if (!(cbR - cbL > 0)) return null;
+
+    const c = (cbL + cbR) / 2;
+    const vpW = document.documentElement.clientWidth;
+    let clipL = 0, clipR = vpW;
+    const boxes = [];
+    const consider = (k) => {
+      const b = k.getBoundingClientRect();
+      if (!b.width || !b.height) {
+        // A display:contents wrapper has no box of its own, but its children do.
+        if (getComputedStyle(k).display === 'contents') for (const g of k.children) consider(g);
+        return;
+      }
+      if (b.left < c && b.right > c) return;
+      const kcs = getComputedStyle(k);
+      if (kcs.visibility !== 'visible') return;
+      const pos = kcs.position;
+      // Floating buttons and badges sit on top of the page, not beside the column.
+      if ((pos === 'fixed' || pos === 'absolute') && b.height < innerHeight / 3) return;
+      // Fixed and sticky boxes follow the scroll, so they will be beside the image
+      // whenever it is on screen - unless they are parked off the top or bottom.
+      const pinnedToScreen = pos === 'fixed' || pos === 'sticky';
+      if (pinnedToScreen && (b.bottom <= 0 || b.top >= innerHeight)) return;
+      boxes.push({ el: k, side: b.right <= c ? -1 : 1, left: b.left, right: b.right,
+                   top: b.top, bottom: b.bottom, pinnedToScreen });
+    };
+
+    let child = null;
+    for (let el = cb; el; child = el, el = el.parentElement) {
+      for (const k of el.children) if (k !== child) consider(k);
+      if (el === document.documentElement) break;
+      if (clips(el, el === cb ? cs : getComputedStyle(el))) {
+        const er = el.getBoundingClientRect();
+        clipL = Math.max(clipL, er.left + el.clientLeft);
+        clipR = Math.min(clipR, er.left + el.clientLeft + el.clientWidth);
+        break;
+      }
+    }
+    return { cb, cbL, cbR, clipL, clipR, vpW, boxes };
+  }
+
+  // Short-lived: a sweep asks for the same column once per image in it, and the layout
+  // cannot change within one burst of work. Anything older is measured again.
+  const columns = new Map();
+  let columnsAt = 0;
+
+  // Where the image may sit across the page, in client css px: {cbL, cbR} is the content
+  // box of the block it is laid out in, {L, R} the band it may fill. null where the window
+  // is the only honest answer - see CFG.fitWidth.
+  //
+  // None of this measures the image, or anything whose width depends on it: resizing the
+  // image cannot feed back into the answer, which is what would otherwise let it creep
+  // narrower with every pass.
+  function layoutOf(img, nw, nh) {
+    if (CFG.fitWidth === 'window' || !img || !nw) return null;
+    const cb = containingBlock(img);
+    if (!cb) return null;
+    const now = performance.now();
+    if (now - columnsAt > 50) { columns.clear(); columnsAt = now; }
+    let m = columns.get(cb);
+    if (m === undefined) { m = measureColumn(cb); columns.set(cb, m); }
+    if (!m) return null;
+
+    if (CFG.fitWidth === 'container') {
+      return { cbL: m.cbL, cbR: m.cbR, L: m.cbL, R: m.cbL + Math.min(m.cbR - m.cbL, m.vpW) };
+    }
+
+    // The rows the image will cover at most - as tall as it would be at the window's full
+    // width - so that growing it cannot bring something new alongside.
+    const top = img.getBoundingClientRect().top;
+    const bottom = top + m.vpW * nh / nw;
+    let L = m.clipL, R = m.clipR;
+    for (const b of m.boxes) {
+      if (b.el.contains(img)) continue;
+      if (!b.pinnedToScreen && (b.bottom <= top || b.top >= bottom)) continue;
+      if (b.side < 0) L = Math.max(L, b.right);
+      else R = Math.min(R, b.left);
+    }
+    // A band under half the column means something beside it was misread. The column
+    // itself is always a safe answer.
+    if (R - L < (m.cbR - m.cbL) / 2) { L = m.cbL; R = m.cbR; }
+    return { cbL: m.cbL, cbR: m.cbR, L, R };
   }
 
   function targetSize(img, nw, nh, forcedMode) {
@@ -432,18 +559,22 @@ void main() {
     // 2x the image's own pixels, regardless of viewport - a detail-inspection view.
     if (m === 'double') return { w: nw * 2, h: nh * 2, factor: 2 };
 
-    const avail = availableDevice(img, vp);
+    // Width to fit into, in device px. Never wider than the window - a band reported as
+    // wider is a horizontal scroller or something misread, and the window is the honest
+    // ceiling.
+    const lay = layoutOf(img, nw, nh);
+    const avail = lay ? Math.max(1, Math.min(vp.w, Math.floor((lay.R - lay.L) * vp.r))) : vp.w;
 
     if (m === 'integer') {
       let k = Math.floor(avail / nw);
       if (CFG.fitHeightToo) k = Math.min(k, Math.floor(vp.h / nh));
       k = Math.max(1, Math.min(k, 8));
-      return { w: nw * k, h: nh * k, factor: k };
+      return { w: nw * k, h: nh * k, factor: k, lay };
     }
 
     let f = avail / nw;
     if (CFG.fitHeightToo) f = Math.min(f, vp.h / nh);
-    return { w: Math.round(nw * f), h: Math.round(nh * f), factor: f };
+    return { w: Math.round(nw * f), h: Math.round(nh * f), factor: f, lay };
   }
 
   /* ================================================================== *
@@ -453,60 +584,138 @@ void main() {
   let idCounter = 0;
   const state = new WeakMap();
 
+  // The <source> siblings of an <img> inside <picture>. The browser picks from these
+  // before it ever looks at the img's own src or srcset.
+  function sourcesOf(img) {
+    const pic = img.parentElement;
+    if (!pic || pic.tagName !== 'PICTURE') return [];
+    return [...pic.children].filter((el) => el.tagName === 'SOURCE');
+  }
+
+  // What the PAGE has asked this element to show: its attributes, not what is on screen.
+  //
+  // The two disagree for a while after every change. Measured: synchronously after
+  // `img.src = next`, currentSrc and naturalWidth still describe the previous image;
+  // while the next one loads, currentSrc is '' and the size is 0x0; only after the load
+  // do they describe the new image. The attributes change at the instant the page acts,
+  // which makes them the one reliable way to tell "the page has moved on" apart from
+  // "our own swap is showing" - and to notice it DURING a resample, not only afterwards.
+  function pageKey(img) {
+    let k = img.getAttribute('src') || '';
+    const set = img.getAttribute('srcset');
+    if (set !== null) k += '\n' + set;
+    for (const so of sourcesOf(img)) k += '\n' + (so.getAttribute('srcset') || '');
+    return k;
+  }
+
+  // The page's own attributes, verbatim, so that letting go of the element can put back
+  // exactly what was there - not the absolute URL a relative one resolved to.
+  function captureRaw(img) {
+    return {
+      src: img.getAttribute('src'),
+      srcset: img.getAttribute('srcset'),
+      sources: sourcesOf(img).map((so) => [so, so.getAttribute('srcset')]),
+    };
+  }
+
+  // srcset or <picture>: the browser chooses the file, and ignores src while it does.
+  const responsive = (raw) => raw.srcset !== null || raw.sources.length > 0;
+
   function record(img) {
     let s = state.get(img);
-    const cur = img.currentSrc || img.src;
 
     if (!s) {
       s = {
-        id: ++idCounter, origUrl: cur, el: new WeakRef(img),
-        nw: img.naturalWidth, nh: img.naturalHeight,
+        id: ++idCounter, el: new WeakRef(img),
+        // What the page asked for (see pageKey), what it looks like while one of our
+        // bitmaps is showing instead, and the page's own attributes for putting back.
+        siteKey: null, ourKey: null, raw: null,
+        // The file actually loaded for it, and that file's size in image pixels. Empty
+        // and 0 until it has finished loading. `gen` counts sources, so cache keys stay
+        // short even when the source is a multi-megabyte data: URL.
+        origUrl: '', nw: 0, nh: 0, gen: 0, pixelsKnown: false,
         // safeUrl is our own copy of the ORIGINAL bitmap, taken when the source is
         // the kind a site can take away again. See sourceUrl() below.
         blobUrl: null, safeUrl: null, key: null,
         forcedMode: null, busy: false, rerun: false,
-        retryable: false,
+        retryable: false, reverts: 0, limit: null, waiting: false,
         status: 'pending', report: null, anchor: null, baseRect: null,
         // key -> blob URL, so flipping between filters you have already seen is
         // instant instead of a fresh resample plus PNG encode each time.
         cache: new Map(),
+        // Inline styles of the <img> itself: the page's values from before we wrote
+        // ours, and what we last wrote. See setOwn().
+        saved: null, wrote: null,
       };
       state.set(img, s);
+      adopt(img, s, pageKey(img));
       return s;
     }
 
-    // Ignore src changes while a swap of ours is in flight: the value passing
-    // through is our own resampled blob. Treating it as a new source would
-    // overwrite origUrl and the recorded natural size with the resampled size,
-    // and the image would then fail the eligibility check and be skipped for good.
+    // Ignore attribute changes while a swap of ours is in flight: the values passing
+    // through are our own. Treating them as a new source would record our resampled
+    // bitmap as the original, and its size as the natural size.
     if (s.busy) return s;
 
-    // An image can be recorded before it has decoded - IntersectionObserver fires for
-    // elements that are in view but still loading - and its natural size is 0 then.
-    // The src-change branch below is the only other place the size is refreshed, so an
-    // image whose URL never changes would keep a size of 0, fail eligible(), and be
-    // skipped for as long as the page lived.
-    if (!s.nw && img.naturalWidth) {
-      s.nw = img.naturalWidth;
-      s.nh = img.naturalHeight;
-      s.key = null;
-    }
-
-    // The site swapped in a different image behind our back.
-    // Our snapshot counts as ours as much as a resample does: after the script is
-    // switched off on a site that revoked its own URL, the element is left displaying
-    // the snapshot, and mistaking that for a new source would drop the cache and then
-    // point origUrl at a URL this very branch is about to revoke.
-    const ours = (s.blobUrl && cur === s.blobUrl) || (s.safeUrl && cur === s.safeUrl);
-    if (!ours && cur !== s.origUrl) {
+    const k = pageKey(img);
+    if (k !== s.siteKey && k !== s.ourKey) {
+      // The page pointed this element at something new.
       dropCache(s);
-      s.origUrl = cur;
+      adopt(img, s, k);
+    } else if (k === s.siteKey && s.blobUrl) {
+      // The page put its own file back over our bitmap - usually a lazy-loader that
+      // re-asserts src. Swap ours back in, but only a few times: past that the page is
+      // fighting us, and the browser's own scaling beats an image that flickers.
+      s.blobUrl = null;
+      s.key = null;
+      if (++s.reverts > 3) {
+        s.limit = { key: '*', why: 'the page keeps putting its own image back' };
+      }
+    }
+    if (!s.origUrl) settle(img, s);
+    return s;
+  }
+
+  function adopt(img, s, k) {
+    s.siteKey = k;
+    s.ourKey = null;
+    s.raw = captureRaw(img);
+    s.origUrl = '';
+    s.nw = s.nh = 0;
+    s.gen++;
+    s.pixelsKnown = !responsive(s.raw);
+    s.key = null;
+    s.reverts = 0;
+    s.limit = null;
+    s.status = 'pending';
+    settle(img, s);
+  }
+
+  // Take what the element shows as the source - once it has finished loading what the
+  // page asked for, and not before: until then its size is either 0 or the previous
+  // image's.
+  //
+  // Nothing else would notice that moment. A reader that turns pages by changing the src
+  // of one <img> causes a mutation when it sets the attribute, but none when the file
+  // arrives, so without this listener the new page sat at 0x0 - 'pending', and scaled by
+  // the browser - until something unrelated happened to run a sweep.
+  function settle(img, s) {
+    if (img.complete && img.naturalWidth && img.currentSrc) {
+      s.origUrl = img.currentSrc;
       s.nw = img.naturalWidth;
       s.nh = img.naturalHeight;
       s.key = null;
-      s.status = 'pending';
+    } else if (!s.waiting) {
+      s.waiting = true;
+      const done = () => {
+        s.waiting = false;
+        img.removeEventListener('load', done);
+        img.removeEventListener('error', done);
+        if (enabled) schedule();
+      };
+      img.addEventListener('load', done);
+      img.addEventListener('error', done);
     }
-    return s;
   }
 
   const CACHE_MAX = 3;   // per image; a 2560-wide PNG blob is a few MB
@@ -608,7 +817,21 @@ void main() {
   // took quality 1 to mean "lossy, maximum" would quietly undo the resampling this
   // script exists to perform. So it is proven once, on random noise, which is the
   // worst case for anything that quantises. Anything unproven falls back to PNG.
-  const encoderReady = (async () => {
+  //
+  // Proven on first use rather than at startup: the script loads on every page of every
+  // site and is off on nearly all of them, where an encode and a decode per page load is
+  // pure waste. It has a deadline like every other await in the pipeline - without one, a
+  // page whose canvas never called back would hold every resample behind it forever.
+  let encoderProbe = null;
+  const encoder = () => (encoderProbe ||=
+    withTimeout(probeEncoder(), 3000, 'encoder probe timed out').catch(() => 'image/png'));
+
+  // Largest side the encoder can write. WebP's format stops at 16383; past that Chrome's
+  // encoder does not refuse but silently crops - measured, a 2560x17000 canvas came back
+  // as a 2560x16383 WebP holding only the top of the picture.
+  const encoderMax = (type) => (type === 'image/webp' ? 16383 : Infinity);
+
+  async function probeEncoder() {
     try {
       const cv = document.createElement('canvas');
       cv.width = cv.height = 64;
@@ -635,7 +858,7 @@ void main() {
     } catch {
       return 'image/png';
     }
-  })();
+  }
 
   // Where to load this image's ORIGINAL bitmap from - not always the URL the page used.
   const sourceUrl = (s) => s.safeUrl || s.origUrl;
@@ -685,8 +908,14 @@ void main() {
     cv.height = s.nh;
     // Synchronous, and before the first await - so the pixels are captured even if the
     // site swaps this element's src while the encode below is still running.
-    cv.getContext('2d').drawImage(img, 0, 0);
-    const blob = await new Promise((r) => cv.toBlob(r, type, 1));
+    //
+    // Drawn at an explicit size. drawImage(img, 0, 0) draws at the element's natural size,
+    // and for a srcset candidate that is the density-corrected size - a 2250-wide file
+    // offered as `2x` has a naturalWidth of 1125 - so the copy would silently be half
+    // resolution. s.nw is the file's own pixel width.
+    cv.getContext('2d').drawImage(img, 0, 0, s.nw, s.nh);
+    const blob = await withTimeout(new Promise((r) => cv.toBlob(r, type, 1)),
+                                   8000, 'snapshot encode timed out');
     if (!blob) throw new Error('snapshot encode failed');
     const url = URL.createObjectURL(blob);
     s.safeUrl = url;
@@ -718,14 +947,20 @@ void main() {
     ]).finally(() => clearTimeout(timer));
   }
 
-  // Resolves TRUE if the element is now showing that URL, FALSE if it failed or timed
-  // out. It must never reject - an unresolved promise here would leave s.busy true
-  // forever and block that image permanently - but the caller does need the answer.
-  // Swallowing it outright is what let a dead source show as a broken-image icon with
-  // nothing in the overlay to explain it.
-  function setSrc(img, url) {
+  // Resolves TRUE once the element has finished loading what its attributes now name
+  // (and, given a URL, is showing that URL), FALSE if it failed or timed out. It must
+  // never reject - an unresolved promise here would leave s.busy true forever and block
+  // that image permanently - but the caller does need the answer. Swallowing it outright
+  // is what let a dead source show as a broken-image icon with nothing in the overlay to
+  // explain it.
+  //
+  // Called straight after the attributes are written, in the same task: load and error
+  // are always dispatched later, so the listeners cannot miss them, and an image the
+  // browser already holds reports complete synchronously.
+  function waitShown(img, url) {
+    const showing = () => img.complete && img.naturalWidth > 0 && (!url || img.currentSrc === url);
     return new Promise((res) => {
-      if ((img.currentSrc || img.src) === url && img.complete) return res(img.naturalWidth > 0);
+      if (showing()) return res(true);
       let settled = false;
       let timer;
       const finish = (ok) => {
@@ -736,15 +971,46 @@ void main() {
         img.removeEventListener('error', onError);
         res(ok);
       };
-      const onLoad = () => finish(true);
+      const onLoad = () => finish(showing());
       const onError = () => finish(false);
       img.addEventListener('load', onLoad);
       img.addEventListener('error', onError);
-      timer = setTimeout(() => finish(false), 5000);
-      img.src = url;
-      // Cached images can complete before the listener attaches.
-      if (img.complete) finish(img.naturalWidth > 0);
+      timer = setTimeout(() => finish(showing()), 5000);
     });
+  }
+
+  const setAttr = (el, name, v) => (v === null ? el.removeAttribute(name) : el.setAttribute(name, v));
+
+  // Show one of our own bitmaps. On a responsive image that means srcset and every
+  // <picture> source too: the browser picks from those and ignores src altogether, which
+  // is why a plain src swap used to leave such an image showing the page's own file
+  // while the overlay reported a resample. A bare URL in srcset is a single candidate at
+  // 1x, so `sizes` stops mattering and the natural size is the bitmap's own.
+  function showOurs(img, s, url) {
+    if (img.getAttribute('src') !== url || (responsive(s.raw) && img.getAttribute('srcset') !== url)) {
+      if (responsive(s.raw)) {
+        for (const [so] of s.raw.sources) so.setAttribute('srcset', url);
+        img.setAttribute('srcset', url);
+      }
+      img.setAttribute('src', url);
+    }
+    // What the element looks like while it shows ours. Taken now, synchronously: after
+    // the await, a change of the page's own would otherwise be mistaken for ours.
+    s.ourKey = pageKey(img);
+    return waitShown(img, url);
+  }
+
+  // Put back exactly what the page had - its attributes verbatim - and wait for whatever
+  // the browser then chooses to load.
+  function showSite(img, s) {
+    const r = s.raw;
+    if (pageKey(img) !== s.siteKey) {
+      for (const [so, v] of r.sources) setAttr(so, 'srcset', v);
+      setAttr(img, 'srcset', r.srcset);
+      setAttr(img, 'src', r.src);
+    }
+    s.ourKey = null;
+    return waitShown(img, null);
   }
 
   /* ------------------------------------------------------------------ *
@@ -819,45 +1085,120 @@ void main() {
     }
   }
 
+  /* ------------------------------------------------------------------ *
+   * The <img>'s own inline styles
+   * ------------------------------------------------------------------ */
+  //
+  // Every property the script writes on an image goes through setOwn, which remembers
+  // what the page had there first, so that letting go puts back exactly that. Many
+  // readers set these themselves - e-hentai writes width and height inline, pan-and-zoom
+  // viewers drive transform - and simply deleting ours used to take theirs with it, and
+  // went on deleting them at every sweep for as long as the script stayed off.
+  //
+  // Anything present that is not what we last wrote belongs to the page, even if it
+  // arrived after we started: that newer value is the one to put back.
+  const OWN_PROPS = ['width', 'height', 'max-width', 'max-height', 'margin-left', 'margin-right',
+                     'image-rendering', 'transform', 'vertical-align'];
+
+  function setOwn(img, s, prop, value) {
+    const st = img.style;
+    if (!s.saved) { s.saved = {}; s.wrote = {}; }
+    const cur = st.getPropertyValue(prop);
+    if (!(prop in s.wrote) || cur !== s.wrote[prop]) {
+      s.saved[prop] = [cur, st.getPropertyPriority(prop)];
+    }
+    if (value === null) st.removeProperty(prop);
+    else st.setProperty(prop, value, 'important');
+    s.wrote[prop] = st.getPropertyValue(prop);   // as the browser serialises it
+  }
+
+  // Hand one property back: the page's value returns, unless the page has written its
+  // own since we last did, in which case that one stays.
+  function dropOwn(img, s, prop) {
+    if (!s.wrote || !(prop in s.wrote)) return;
+    if (img.style.getPropertyValue(prop) === s.wrote[prop]) {
+      const [v, pri] = s.saved[prop];
+      img.style.removeProperty(prop);
+      if (v) img.style.setProperty(prop, v, pri);
+    }
+    delete s.wrote[prop];
+    delete s.saved[prop];
+  }
+
+  function releaseOwn(img, s) {
+    if (!s.saved) return;
+    for (const prop of OWN_PROPS) dropOwn(img, s, prop);
+    s.saved = s.wrote = null;
+  }
+
+  // Has the page rewritten the size we set? Some viewers recompute their images' inline
+  // size on their own schedule, and a bitmap drawn for our size then gets scaled by the
+  // browser to theirs - twice resampled, still labelled Lanczos3.
+  function sizeIntact(img, s) {
+    return !!s.wrote && img.style.getPropertyValue('width') === s.wrote.width &&
+           img.style.getPropertyValue('height') === s.wrote.height;
+  }
+
   function applySize(img, t, s) {
     const d = dpr();
     const cssW = t.w / d, cssH = t.h / d;
 
     relaxContainers(img);
 
-    img.style.setProperty('max-width', 'none', 'important');
-    img.style.setProperty('max-height', 'none', 'important');
-    img.style.setProperty('width', cssW + 'px', 'important');
-    img.style.setProperty('height', cssH + 'px', 'important');
+    setOwn(img, s, 'max-width', 'none');
+    setOwn(img, s, 'max-height', 'none');
+    setOwn(img, s, 'width', cssW + 'px');
+    setOwn(img, s, 'height', cssH + 'px');
 
-    // A per-image override must not disturb the rest of the page. Negative
-    // margins keep the element's MARGIN box at the width it would have had
-    // without the override, so the container never grows and the images above
-    // and below keep their x positions. The border box still paints at full
-    // size, overflowing outside the container.
-    img.style.removeProperty('margin-left');
-    img.style.removeProperty('margin-right');
+    // An image drawn wider than its column must not disturb the rest of the page.
+    // Negative margins keep the element's MARGIN box at the width the layout already
+    // gave it, so the column never grows and everything beside, above and below keeps
+    // its x position. The border box still paints at full size, past the column's edges.
+    let ml = null, mr = null;
     s.anchor = null;
 
     if (s.forcedMode) {
-      const baseW = targetSize(img, s.nw, s.nh, null).w / d;
-      const extra = cssW - baseW;
+      // A per-image override keeps the slot the image had without it: the whole column
+      // where fit-width had already spread past it, the image's own width otherwise.
+      const base = targetSize(img, s.nw, s.nh, null);
+      const baseW = base.w / d;
+      const colW = base.lay ? base.lay.cbR - base.lay.cbL : Infinity;
+      const extra = cssW - Math.min(baseW, colW);
       if (extra > 0.5) {
         const vp = window.visualViewport?.width ?? innerWidth;
         if (cssW <= vp) {
           // Fits on screen: expand symmetrically, stays where it was.
-          img.style.setProperty('margin-left', `${-extra / 2}px`, 'important');
-          img.style.setProperty('margin-right', `${-extra / 2}px`, 'important');
+          ml = mr = `${-extra / 2}px`;
           s.anchor = 'center';
         } else {
           // Wider than the screen. Overflow to the right only - in a LTR page,
           // left overflow is not scrollable, so a centred image would have its
           // left edge permanently unreachable.
-          img.style.setProperty('margin-right', `${-extra}px`, 'important');
+          mr = `${-extra}px`;
           s.anchor = 'left';
         }
       }
+    } else if (t.lay) {
+      const { L, R, cbL, cbR } = t.lay;
+      const colW = cbR - cbL;
+      // Placed explicitly - centred in the free band, which for fit-width means filling
+      // it exactly - whenever the page's own alignment would get it wrong: the image is
+      // wider than its column, or part of the column is out of bounds. Webtoons is the
+      // second case: its column runs past the window's right edge, so an image centred
+      // in the column hangs off the screen.
+      if (cssW > colW + 0.5 || L > cbL + 0.5 || R < cbR - 0.5) {
+        const l = L + (R - L - cssW) / 2 - cbL;
+        ml = `${l}px`;
+        mr = `${colW - cssW - l}px`;
+      }
     }
+    if (ml !== null) setOwn(img, s, 'margin-left', ml); else dropOwn(img, s, 'margin-left');
+    if (mr !== null) setOwn(img, s, 'margin-right', mr); else dropOwn(img, s, 'margin-right');
+
+    // An inline image sits on the text baseline, which leaves the font's descender space
+    // as a strip of background under it. Top-aligned, the line is exactly as tall as the
+    // image.
+    if (getComputedStyle(img).display === 'inline') setOwn(img, s, 'vertical-align', 'top');
   }
 
   // Two jobs, one transform (transforms never affect layout):
@@ -866,8 +1207,10 @@ void main() {
   //  - land on a whole device pixel; a half-pixel offset re-blurs an image that
   //    is otherwise sized correctly
   function snap(img, s) {
+    // Switched off, or the page moved on, while this waited for its frame.
+    if (!enabled || s.key === null || !img.isConnected) return;
     const d = dpr();
-    img.style.setProperty('transform', 'none', 'important');
+    setOwn(img, s, 'transform', 'none');
     const r = img.getBoundingClientRect();
 
     let dx = 0;
@@ -881,9 +1224,7 @@ void main() {
     const left = r.left + dx;
     dx += (Math.round(left * d) - left * d) / d;
     const dy = (Math.round(r.top * d) - r.top * d) / d;
-    if (dx || dy) {
-      img.style.setProperty('transform', `translate(${dx}px, ${dy}px)`, 'important');
-    }
+    if (dx || dy) setOwn(img, s, 'transform', `translate(${dx}px, ${dy}px)`);
   }
 
   // Per-stage timings. The overlay reports the outcome but not where the time went,
@@ -922,19 +1263,73 @@ void main() {
     }
   }
 
+  // Thrown inside processImage when the work in hand stopped applying while it waited:
+  // the script was switched off, or the page pointed the element at something else.
+  // Measured before this existed: a reader that turned the page during an encode had
+  // its new page replaced by a resample of the old one, and the script switched off
+  // mid-resample swapped the resample in anyway and left it there.
+  const STALE = new Error('stale');
+
+  // Where the band sits, to the eighth of a pixel. A change here needs new margins but not
+  // a new bitmap.
+  const placeOf = (t) => (t.lay ? [t.lay.L, t.lay.R, t.lay.cbL, t.lay.cbR]
+    .map((v) => Math.round(v * 8)).join(':') : '');
+
+  // Generous for big outputs: the encode is CPU work that grows with the pixel count.
+  const encodeDeadline = (t) => Math.max(8000, t.w * t.h / 2500);
+
   async function processImage(img) {
+    if (!enabled) return;
     const s = record(img);
-    if (!s.nw || !eligible(s)) return;
+    if (!s.origUrl || !s.nw || !eligible(s)) return;
     // A resample is async. Dropping a request that arrives mid-flight would lose
     // the most recent intent, so a keypress during processing would appear to do
     // nothing. Queue it and re-run once the current pass finishes.
     if (s.busy) { s.rerun = true; return; }
+    observeBox(img);
 
+    // On a responsive image the natural size is density-corrected - a 2250-wide file
+    // offered as `2x` reports 1125 - while the GPU is handed the whole file. Learn the
+    // file's own size once per source, before any geometry is worked out from it.
+    if (!s.pixelsKnown) {
+      s.busy = true;
+      s.pixelsKnown = true;
+      try {
+        const bm = await withTimeout(createImageBitmap(img), 5000, 'measure timed out');
+        if (bm.width && bm.height) { s.nw = bm.width; s.nh = bm.height; }
+        bm.close();
+      } catch { /* the natural size is a lower bound, and still works */ }
+      s.busy = false;
+      s.rerun = false;
+      return processImage(img);
+    }
+
+    // Before anything is measured: relaxing a site's wrapper changes the very column the
+    // image is measured against. Measured the other way round, e-hentai's MPV placed its
+    // first page for the 994px wrapper it was about to lose - 100px off-centre until a
+    // later pass happened to put it right.
+    relaxContainers(img);
     const t = targetSize(img, s.nw, s.nh, s.forcedMode);
-    const key = `${s.origUrl}|${t.w}x${t.h}|${quality}`;
-    if (s.key === key) return;
+    // The source generation, not its URL: a data: URL can be megabytes long.
+    const key = `${s.gen}|${t.w}x${t.h}|${quality}`;
+    const place = placeOf(t);
+    if (s.key === key) {
+      // Same bitmap. Only the layout may need touching - the band moved, or the page
+      // rewrote the size we set.
+      if (s.place !== place || !sizeIntact(img, s)) {
+        applySize(img, t, s);
+        s.place = place;
+        defer(() => snap(img, s));
+      }
+      return;
+    }
 
     s.busy = true;
+    // What the element's attributes should say at each point below. Our own swaps change
+    // it; anything else changing it means the page moved on.
+    let expect = pageKey(img);
+    const check = () => { if (!enabled || pageKey(img) !== expect) throw STALE; };
+    const swapped = () => { expect = s.ourKey !== null ? s.ourKey : s.siteKey; };
     traceMark(`#${s.id} start`);
     try {
       // Size the element up front. The geometry depends on mode alone, so it is fully
@@ -945,13 +1340,14 @@ void main() {
       applySize(img, t, s);
 
       const kind = originKind(s.origUrl);
+      const limited = s.limit && (s.limit.key === '*' || s.limit.key === key) ? s.limit.why : null;
       const blocked =
         kind === 'file'
           ? 'file:// is an opaque origin - the GPU path cannot run on local files'
           : kind === 'other' ? 'unsupported URL scheme'
           : kind === 'cross' && noCors.has(hostOf(s.origUrl))
             ? 'cross-origin, and the image host sends no CORS headers'
-          : null;
+          : limited;
 
       // Both resamplers go through the GPU. That is what makes every quality
       // switch replace the image resource, which is what actually forces Chrome
@@ -968,22 +1364,31 @@ void main() {
         const cached = !!url;
         if (!url) {
           // Resolved before the resample, never between it and toBlob - see below.
-          const type = await encoderReady;
-          // Only reuse the live element when it is definitely untainted.
-          const fresh = kind === 'same' && !s.blobUrl && img.complete &&
-                        (img.currentSrc || img.src) === s.origUrl;
+          const type = await encoder();
+          check();
+          const most = Math.min(GL.maxDim(), encoderMax(type));
+          if (Math.max(t.w, t.h, s.nw, s.nh) > most) {
+            throw tooLarge(`too large to resample in one piece: ${t.w}x${t.h}, and this ` +
+                           `GPU and encoder stop at ${most} px a side`);
+          }
+          // Only reuse the live element when it is definitely untainted and is showing
+          // the page's own image.
+          const fresh = kind === 'same' && pageKey(img) === s.siteKey && img.complete &&
+                        img.currentSrc === s.origUrl;
 
           // This is the last moment the original exists anywhere but in this element:
           // the swap further down replaces it, and on a site that revokes its blob:
           // pages the URL it came from may already be dead. Take a copy now or never.
           if (fresh && !s.safeUrl && volatileSource(s.origUrl)) {
             await timed(s, 'snapshot source', () => snapshot(img, s, type));
+            check();
           }
 
           const source = fresh ? img
             : await timed(s, 'load source', () =>
                 withTimeout(loadImage(sourceUrl(s), originKind(sourceUrl(s))),
                             8000, 'source load timed out'));
+          check();
 
           // GL.resample hands back ONE canvas, reused by every image. toBlob snapshots
           // it when called, so the resample and that call must stay in a single
@@ -993,7 +1398,7 @@ void main() {
           const canvas = timeSync(s, 'gpu resample', () =>
             GL.resample(source, s.nw, s.nh, t.w, t.h, quality));
           const encoding = withTimeout(
-            new Promise((r) => canvas.toBlob(r, type, 1)), 8000, 'encode timed out');
+            new Promise((r) => canvas.toBlob(r, type, 1)), encodeDeadline(t), 'encode timed out');
           const blob = await timed(s, `${type.slice(6)} encode`, () => encoding);
           if (!blob) throw new Error('encode failed');
           url = URL.createObjectURL(blob);
@@ -1002,14 +1407,18 @@ void main() {
           // unclaimed blob is fair game for another image's eviction pass.
           s.blobUrl = url;
           trackBlob(url, s, key, blob.size);
+          // Still a good bitmap for this source even if it is too late to show now,
+          // which is why the check comes after the cache has it.
+          check();
         }
 
         s.blobUrl = url;
-        if (!await timed(s, 'swap src', () => setSrc(img, url))) {
-          throw new Error('resampled image failed to load');
-        }
+        const shown = await timed(s, 'swap src', () => showOurs(img, s, url));
+        swapped();
+        check();
+        if (!shown) throw new Error('resampled image failed to load');
         trimCache(s);
-        img.style.setProperty('image-rendering', 'auto', 'important');
+        setOwn(img, s, 'image-rendering', 'auto');
         s.status = quality === 'nearest'
           ? (Number.isInteger(t.factor)
               ? 'nearest (gpu) @ integer — valid'
@@ -1027,10 +1436,13 @@ void main() {
           // inspecting state mid-swap still recognises the displayed blob as ours.
           // No revoke here - the blob stays in s.cache for the next switch back.
           //
-          // sourceUrl, not origUrl: where the site has released its own URL, ours is
-          // the only copy left, and putting the dead one back is precisely what showed
-          // a broken image with no error attached.
-          const ok = await timed(s, 'restore src', () => setSrc(img, sourceUrl(s)));
+          // The snapshot where there is one: where the site has released its own URL,
+          // ours is the only copy left, and putting the dead one back is precisely what
+          // showed a broken image with no error attached.
+          const ok = await timed(s, 'restore src', () =>
+            (s.safeUrl ? showOurs(img, s, s.safeUrl) : showSite(img, s)));
+          swapped();
+          check();
           s.blobUrl = null;
           if (!ok) throw new Error('original no longer loadable - the site released it');
         }
@@ -1038,17 +1450,17 @@ void main() {
           // One image pixel per device pixel: there is nothing to resample, so
           // every quality setting looks the same here. Snapping is what makes
           // that true on screen.
-          img.style.setProperty('image-rendering', 'auto', 'important');
+          setOwn(img, s, 'image-rendering', 'auto');
           s.status = 'factor 1 - no resampling (all qualities identical here)';
         } else if (quality === 'nearest') {
           // Only reached when the GPU path is unavailable (e.g. file://).
-          img.style.setProperty('image-rendering', 'pixelated', 'important');
+          setOwn(img, s, 'image-rendering', 'pixelated');
           s.status = 'nearest (css fallback) — ' + (blocked || 'gpu unavailable');
         } else if (quality === 'browser') {
-          img.style.removeProperty('image-rendering');
+          dropOwn(img, s, 'image-rendering');
           s.status = 'chrome bilinear';
         } else {
-          img.style.setProperty('image-rendering', 'auto', 'important');
+          setOwn(img, s, 'image-rendering', 'auto');
           s.status = blocked ? 'chrome bilinear — ' + blocked
             : t.w * t.h > CFG.maxOutputPixels ? 'over pixel cap - fell back to chrome'
             : 'gpu unavailable: ' + (GL.why() || 'unknown');
@@ -1058,8 +1470,15 @@ void main() {
       applySize(img, t, s);
       defer(() => snap(img, s));
       s.key = key;
+      s.place = place;
       s.report = { ...t, nw: s.nw, nh: s.nh };
     } catch (e) {
+      // Nothing to report: the next pass starts again from whatever is true now.
+      if (e === STALE) {
+        s.key = null;
+        s.rerun = true;
+        return;
+      }
       // A refused CORS read is the host's answer, not a failure worth reporting as one.
       // Record the host so no other image on it repeats the attempt, then run this image
       // again: `blocked` is set the second time round, so it takes the non-GPU path and
@@ -1071,45 +1490,60 @@ void main() {
         s.rerun = true;
         return;
       }
+      // Too big for this GPU or format: a limit, handled the same way.
+      if (e.tooLarge) {
+        s.limit = { key, why: e.message };
+        s.key = null;
+        s.rerun = true;
+        return;
+      }
       s.status = 'ERROR: ' + e.message;
       // A missed deadline usually says something about the moment, not the image:
       // a throttled background tab, a busy GPU. Worth one more go later. Anything
       // else - tainted source, unreadable origin - would just fail again.
       s.retryable = /timed out/.test(e.message);
       s.key = key;
+      s.place = place;
       s.report = { ...t, nw: s.nw, nh: s.nh };
       applySize(img, t, s);
-      img.style.setProperty('image-rendering', 'auto', 'important');
+      setOwn(img, s, 'image-rendering', 'auto');
       console.warn('[crisp-images]', e);
     } finally {
       s.busy = false;
       traceMark(`#${s.id} done - ${s.status}`);
+      // Switched off while this ran: the off switch skipped this image because it was
+      // busy, so hand it back now.
+      if (!enabled) restore(img);
+      else if (s.rerun) { s.rerun = false; processImage(img); }
       updateHud();
-      if (s.rerun) { s.rerun = false; processImage(img); }
     }
   }
 
   async function restore(img) {
     const s = state.get(img);
+    // Mid-swap: processImage calls this again the moment it finishes (see its finally).
     if (!s || s.busy) return;
-    if (s.blobUrl) {
+    if (s.ourKey !== null && pageKey(img) === s.ourKey) {
       s.busy = true;                    // same guard as processImage: this is our swap
-      // Prefer the site's own URL, so switching off really does hand the page back.
-      // Where that URL is dead, fall back to our snapshot rather than to a broken
+      // Prefer the site's own image, so switching off really does hand the page back.
+      // Where its URL is dead, fall back to our snapshot rather than to a broken
       // image: it is the same bitmap, and turning the script off should never leave
       // the page worse than it found it.
-      if (!await setSrc(img, s.origUrl) && s.safeUrl) await setSrc(img, s.safeUrl);
-      s.busy = false;
+      try {
+        if (!await showSite(img, s) && s.safeUrl) await showOurs(img, s, s.safeUrl);
+      } finally {
+        s.busy = false;
+      }
+      // Switched back on while that loaded: let the next sweep take it from here.
+      if (enabled) { s.key = null; schedule(); return; }
     }
     // Keep the snapshot only if it is what the element ended up displaying - revoking
     // it then would break the very image this just repaired.
-    dropCache(s, !!s.safeUrl && (img.currentSrc || img.src) === s.safeUrl);
-    for (const p of ['width', 'height', 'max-width', 'max-height', 'image-rendering',
-                     'transform', 'margin-left', 'margin-right']) {
-      img.style.removeProperty(p);
-    }
+    dropCache(s, !!s.safeUrl && img.currentSrc === s.safeUrl);
+    releaseOwn(img, s);
     unrelaxContainers(img);
     s.key = null;
+    s.place = null;
     s.status = 'off';
   }
 
@@ -1130,19 +1564,22 @@ void main() {
     updateHud();
   }, { rootMargin: `${CFG.lazyMargin * 100}%` });
 
-  const watched = new WeakSet();
+  let watched = new WeakSet();
 
-  // Watches the box the page gives each image.
+  // Watches the boxes the page gives each image: its column and the ancestors above it,
+  // up to the first that clips.
   //
   // The only other triggers are window and visualViewport `resize`, and neither fires
   // when a site rearranges itself internally - opening a thumbnail pane, collapsing a
   // sidebar. Without this the image keeps the width it was given for the old layout and
   // simply overflows, which on a container with overflow:hidden puts part of it out of
-  // reach for good.
+  // reach for good. The ancestors matter as much as the column: on Tapas, closing the
+  // side panel widens the column's parent from 980 to 1265 px and moves the column, but
+  // leaves the column itself at 940 - so only the parent reports it.
   //
-  // Only WIDTH changes count. Resizing an image changes its container's height, so
-  // acting on height would be a feedback loop with our own work; and the width of a
-  // container we are willing to measure cannot depend on the image anyway - see
+  // Only WIDTH changes count. Resizing an image changes the height of everything above
+  // it, so acting on height would be a feedback loop with our own work; and the width of
+  // a box we are willing to measure cannot depend on the image anyway - see
   // widthComesFromParent.
   const containerWidth = new WeakMap();   // element -> the width we last acted on
   const observedBoxes = new Set();
@@ -1154,18 +1591,21 @@ void main() {
       containerWidth.set(e.target, w);
       changed = true;
     }
-    if (changed && enabled) schedule();
+    if (changed && enabled) { columnsAt = 0; schedule(); }
   }) : null;
 
   function observeBox(img) {
-    if (!boxRO || !CFG.fitContainer) return;
-    const el = containingBlock(img);
-    if (!el || observedBoxes.has(el)) return;
-    observedBoxes.add(el);
-    // Seed the width so the first delivery, which merely reports the current size,
-    // does not read as a change and schedule a pointless sweep.
-    containerWidth.set(el, Math.round(el.getBoundingClientRect().width));
-    boxRO.observe(el);
+    if (!boxRO || CFG.fitWidth === 'window') return;
+    const cb = containingBlock(img);
+    for (let el = cb; el && el !== document.documentElement; el = el.parentElement) {
+      if (observedBoxes.has(el)) break;       // and so is everything above it
+      observedBoxes.add(el);
+      // Seed the width so the first delivery, which merely reports the current size,
+      // does not read as a change and schedule a pointless sweep.
+      containerWidth.set(el, Math.round(el.getBoundingClientRect().width));
+      boxRO.observe(el);
+      if (el !== cb && clips(el, getComputedStyle(el))) break;
+    }
   }
 
   // ResizeObserver holds its targets strongly, so a reader that rebuilds its DOM would
@@ -1242,6 +1682,10 @@ void main() {
   }
 
   function sweep() {
+    // Off means off: nothing is observed, nothing is recorded, and no work is done on
+    // the page at all. Everything the script changed was handed back when it was
+    // switched off - see setEnabled.
+    if (!enabled) { updateHud(); return; }
     detach();
     try {
       // IntersectionObserver stops reporting an element once the page removes it, so
@@ -1251,18 +1695,17 @@ void main() {
       // would drift further from reality with every page turn.
       for (const img of visible) if (!img.isConnected) visible.delete(img);
       pruneBoxes();
+      columnsAt = 0;
 
       for (const img of document.images) {
-        if (!enabled) { restore(img); continue; }
         if (img.complete && img.naturalWidth) record(img);
         if (!watched.has(img)) {
           watched.add(img);
           if (!img.complete) img.addEventListener('load', () => schedule(), { once: true });
           io.observe(img);
-          observeBox(img);
         }
       }
-      if (enabled) processVisible();
+      processVisible();
     } finally {
       updateHud();
       attach();
@@ -1270,20 +1713,62 @@ void main() {
   }
 
   function invalidateAll() {
+    if (!enabled) return;
     for (const img of document.images) {
       const s = state.get(img);
       if (s) s.key = null;
     }
-    if (!enabled) for (const img of document.images) restore(img);
     // sweep(), not processVisible(). While the script is off, sweep records nothing
     // and observes nothing, so `state` and `visible` are both empty - and
     // processVisible() skips any image it has no state for. Switching on has to
     // rebuild that state before there is anything to process.
-    else sweep();
+    sweep();
+  }
+
+  // Everything below the switch. Switching off hands back every image straight away -
+  // one busy mid-resample is handed back by processImage the moment it finishes - and
+  // then stops watching the page altogether. Measured on a page that changes its DOM
+  // every frame: while "off", the script used to run a full sweep of every image about
+  // 35 times a second, forever, on any site it had ever been switched on and off again.
+  function setEnabled(on) {
+    enabled = on;
+    writeFlag('enabled', on);
+    if (on) {
+      for (const img of document.images) {
+        const s = state.get(img);
+        if (s && s.status === 'off') s.status = 'pending';
+      }
+      invalidateAll();
+    } else {
+      detach();
+      io.disconnect();
+      boxRO?.disconnect();
+      observedBoxes.clear();
+      visible.clear();
+      watched = new WeakSet();
+      queue.length = 0;
+      columns.clear();
+      for (const img of document.images) restore(img);
+    }
     updateHud();
   }
 
-  const observer = new MutationObserver(() => schedule());
+  // Does this mutation touch an image? Only those need a sweep: a src or srcset changing,
+  // or an <img> (or a <source> choosing for one) arriving or leaving. Everything else a
+  // page does to its DOM - a clock ticking, a counter updating, our own overlay's text -
+  // used to trigger a full sweep too, which on a busy page meant one every frame.
+  // Layout changes that matter without an image changing are the ResizeObserver's job.
+  const hasImage = (n) => n.nodeType === 1 &&
+    (n.tagName === 'IMG' || n.tagName === 'SOURCE' || n.getElementsByTagName('img').length > 0);
+
+  const observer = new MutationObserver((records) => {
+    for (const r of records) {
+      if (hud && hud.contains(r.target)) continue;
+      if (r.type === 'attributes') { schedule(); return; }
+      for (const n of r.addedNodes) if (hasImage(n)) { schedule(); return; }
+      for (const n of r.removedNodes) if (hasImage(n)) { schedule(); return; }
+    }
+  });
   const OPTS = { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'srcset'] };
   let attached = false;
   const attach = () => { if (!attached) { observer.observe(document.documentElement, OPTS); attached = true; } };
@@ -1339,48 +1824,107 @@ void main() {
     processImage(img);
   }
 
-  // Alt + left click toggles one image between the current mode and native 1:1.
-  addEventListener('click', (e) => {
-    const img = e.target;
-    if (!(img instanceof HTMLImageElement)) return;
+  // The image under the pointer, looking through whatever is stacked on top of it.
+  // Readers put click-to-turn overlays and gradients above the page, so the topmost
+  // element is very often not the image - measured: an Alt+click on an image under a
+  // transparent overlay reached the overlay and did nothing at all.
+  function imageAt(e, eligibleOnly) {
+    const ok = (el) => el instanceof HTMLImageElement && state.has(el) &&
+                       (!eligibleOnly || eligible(state.get(el)));
+    if (ok(e.target)) return e.target;
+    return document.elementsFromPoint(e.clientX, e.clientY).find(ok) || null;
+  }
 
-    if (e.altKey && enabled) {
-      toggleOverride(img, 'native');
+  /* ------------------------------------------------------------------ *
+   * Shortcuts, as set at the bottom of the config
+   * ------------------------------------------------------------------ */
+
+  // 'Ctrl+Shift+K' -> { ctrl, shift, alt, meta, key: 'k', text }. null for '' or junk.
+  function parseShortcut(spec) {
+    const b = { alt: false, ctrl: false, shift: false, meta: false, key: '', text: String(spec || '') };
+    for (const part of b.text.split('+')) {
+      const p = part.trim().toLowerCase();
+      if (!p) continue;
+      if (p === 'alt' || p === 'option') b.alt = true;
+      else if (p === 'ctrl' || p === 'control') b.ctrl = true;
+      else if (p === 'shift') b.shift = true;
+      else if (p === 'meta' || p === 'cmd' || p === 'command' || p === 'win') b.meta = true;
+      else b.key = p;
+    }
+    return b.key ? b : null;
+  }
+
+  const KEYS = {
+    toggle: parseShortcut(CFG.keyToggle), mode: parseShortcut(CFG.keyMode),
+    quality: parseShortcut(CFG.keyQuality), overlay: parseShortcut(CFG.keyOverlay),
+    details: parseShortcut(CFG.keyDetails),
+  };
+  const BUTTONS = { leftclick: 0, middleclick: 1, rightclick: 2 };
+  const CLICKS = [['native', parseShortcut(CFG.clickNative)], ['double', parseShortcut(CFG.clickDouble)]]
+    .filter(([, b]) => b && b.key in BUTTONS);
+
+  const sameModifiers = (b, e) =>
+    e.altKey === b.alt && e.ctrlKey === b.ctrl && e.shiftKey === b.shift && e.metaKey === b.meta;
+
+  // The key pressed, as a shortcut names it. e.key is the character the layout typed,
+  // which for a letter is not a letter at all on a Mac with Option ('π' for P) or on a
+  // Russian layout ('з'), so the shortcuts used to do nothing there. Letters and digits
+  // fall back to the key's position. A Latin letter in e.key still wins, so on AZERTY or
+  // Dvorak you press the key marked with the letter.
+  function keyName(e) {
+    const k = (e.key || '').toLowerCase();
+    if (/^[a-z0-9]$/.test(k)) return k;
+    const m = /^(?:Key|Digit)([A-Z0-9])$/.exec(e.code || '');
+    return m ? m[1].toLowerCase() : k;
+  }
+
+  const pressed = (b, e) => !!b && sameModifiers(b, e) && keyName(e) === b.key;
+
+  // Which click shortcut, if any, this click is. button: 0 left, 1 middle, 2 right.
+  function clickAction(e, button) {
+    if (!enabled) return null;
+    const hit = CLICKS.find(([, b]) => BUTTONS[b.key] === button && sameModifiers(b, e));
+    return hit ? hit[0] : null;
+  }
+
+  // A click shortcut acts on the image under the pointer. Anything else is left alone -
+  // Chrome uses Alt+click on a link to download it, and swallowing every Alt+click on
+  // every image used to take that away from thumbnails.
+  function onClick(e, button) {
+    const action = clickAction(e, button);
+    const img = action && imageAt(e, true);
+    if (img) {
+      toggleOverride(img, action);
       e.preventDefault();
       e.stopPropagation();
       return;
     }
+    // Chrome's image document toggles its own zoom on a plain click, which resizes the
+    // image without telling us. Block it.
+    if (button === 0 && IMAGE_DOC && enabled && e.target instanceof HTMLImageElement) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
 
-    // Chrome's image document toggles its own zoom on a plain click, which
-    // resizes the image without telling us. Block it.
-    if (IMAGE_DOC && enabled) { e.preventDefault(); e.stopPropagation(); }
+  addEventListener('click', (e) => onClick(e, 0), true);
+  // Right click: the context menu is only suppressed when the shortcut matched an image.
+  addEventListener('contextmenu', (e) => onClick(e, 2), true);
+  addEventListener('auxclick', (e) => { if (e.button === 1) onClick(e, 1); }, true);
+  // A middle-click shortcut must not also start the browser's autoscroll.
+  addEventListener('mousedown', (e) => {
+    if (e.button === 1 && clickAction(e, 1) && imageAt(e, true)) e.preventDefault();
   }, true);
 
-  // Alt + right click shows one image at 2x its own pixel resolution, using the
-  // current filter. Again to revert. The context menu is suppressed only when
-  // Alt is held on an eligible image, so normal right-click still works.
-  addEventListener('contextmenu', (e) => {
-    if (!enabled || !e.altKey) return;
-    const img = e.target;
-    if (!(img instanceof HTMLImageElement)) return;
-    const s = state.get(img);
-    if (!s || !eligible(s)) return;
-    toggleOverride(img, 'double');
-    e.preventDefault();
-    e.stopPropagation();
-  }, true);
-
+  // Only the diagnostic rows ever name the hovered image, so the hit-test runs only while
+  // they are showing - not on every mouse move of every page the script is loaded on.
   let hoverPending = false;
   addEventListener('mousemove', (e) => {
-    if (hoverPending) return;
+    if (hoverPending || !enabled || !hudVisible || !detailsVisible) return;
     hoverPending = true;
     requestAnimationFrame(() => {
       hoverPending = false;
-      // elementsFromPoint, not elementFromPoint: readers stack click-to-turn overlays
-      // and gradients above the page, so the topmost element under the pointer is very
-      // often not the image. Take the first tracked image anywhere in the stack.
-      const hit = document.elementsFromPoint(e.clientX, e.clientY)
-        .find((el) => el instanceof HTMLImageElement && state.has(el)) || null;
+      const hit = imageAt(e, false);
       // Clearing matters as much as setting. This was write-only, so on a page whose
       // images sit under an overlay the overlay latched onto the first image it ever
       // managed to hit and reported that one for the rest of the session - including
@@ -1398,23 +1942,28 @@ void main() {
   const MODES = ['fit-width', 'integer', 'native'];
   const QUALITIES = ['lanczos3', 'nearest', 'browser'];
 
+  // Is the key going into a text field? Then it is typing, not a shortcut: on a Mac,
+  // Option+letter types a character. composedPath sees into shadow DOM, where e.target
+  // would only be the host.
+  function typing(e) {
+    const el = e.composedPath ? e.composedPath()[0] : e.target;
+    return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName || ''));
+  }
+
   addEventListener('keydown', (e) => {
-    if (!e.altKey || e.ctrlKey || e.metaKey) return;
-    const k = e.key.toLowerCase();
-    if (k === 'p') {
-      enabled = !enabled;
+    if (e.repeat || typing(e)) return;
+    if (pressed(KEYS.toggle, e)) {
       // Only switching ON starts a new measurement. Resetting on OFF too would
       // re-base work still in flight from the previous ON, so a stage that took a
       // second would report a two-digit elapsed time.
-      if (enabled) traceT0 = performance.now();
-      traceMark(`Alt+P -> ${enabled ? 'on' : 'off'}`);
-      writeFlag('enabled', enabled);
-      invalidateAll();
+      if (!enabled) traceT0 = performance.now();
+      traceMark(`${KEYS.toggle.text} -> ${enabled ? 'off' : 'on'}`);
+      setEnabled(!enabled);
     }
-    else if (k === 'h') { hudVisible = !hudVisible; writeFlag('hud', hudVisible); updateHud(); }
-    else if (k === 'g') { detailsVisible = !detailsVisible; updateHud(); }
-    else if (k === 'm') { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; invalidateAll(); }
-    else if (k === 'q') { quality = QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]; invalidateAll(); }
+    else if (pressed(KEYS.overlay, e)) { hudVisible = !hudVisible; writeFlag('hud', hudVisible); updateHud(); }
+    else if (pressed(KEYS.details, e)) { detailsVisible = !detailsVisible; focus = null; updateHud(); }
+    else if (pressed(KEYS.mode, e)) { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; invalidateAll(); updateHud(); }
+    else if (pressed(KEYS.quality, e)) { quality = QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]; invalidateAll(); updateHud(); }
     else return;
     e.preventDefault();
   });
@@ -1435,6 +1984,18 @@ void main() {
     return best;
   }
 
+  // What the overlay and report() say about an image: its own status, or why it has none.
+  // A skipped image used to read 'pending' forever - on Webtoons, whose pages are 700 px
+  // wide and so below the default size filter, that looked exactly like a stuck queue.
+  function statusOf(s) {
+    if (!s.origUrl || !s.nw) return 'waiting for the image to finish loading';
+    if (!eligible(s)) {
+      return `skipped - ${s.nw}x${s.nh} is under the size filter ` +
+             `(minNaturalWidth ${CFG.minNaturalWidth}, minNaturalHeight ${CFG.minNaturalHeight})`;
+    }
+    return s.status;
+  }
+
   let hud;
   function updateHud() {
     if (!hudVisible) { if (hud) hud.style.display = 'none'; return; }
@@ -1446,28 +2007,32 @@ void main() {
         'padding:8px 10px', 'border-radius:6px', 'pointer-events:none',
         'white-space:pre', 'text-align:left', 'max-width:60vw',
       ].join(';');
-      (document.body || document.documentElement).appendChild(hud);
     }
+    // Pages that rebuild their body take the overlay with them.
+    if (!hud.isConnected) (document.body || document.documentElement).appendChild(hud);
     hud.style.display = 'block';
 
     const vp = viewportDevice();
 
-    // Always shown: what the script is doing, and how to drive it.
-    const L = [
-      `crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode}  quality=${quality}`,
-      // Label names what the key will do, not what it is called.
-      `Alt+P ${enabled ? 'off' : 'on'}  Alt+M mode  Alt+Q quality  Alt+H hud  Alt+G details`,
-      'Alt+LeftClick = 1:1   Alt+RightClick = 2x native',
-    ];
+    // Always shown: what the script is doing, and how to drive it - with the shortcuts
+    // as configured, each labelled with what it will do.
+    const keyHelp = [[KEYS.toggle, enabled ? 'off' : 'on'], [KEYS.mode, 'mode'],
+      [KEYS.quality, 'quality'], [KEYS.overlay, 'hud'], [KEYS.details, 'details']]
+      .filter(([b]) => b).map(([b, what]) => `${b.text} ${what}`).join('  ');
+    const clickHelp = CLICKS.map(([what, b]) => `${b.text} = ${what === 'native' ? '1:1' : '2x native'}`)
+      .join('   ');
+    const L = [`crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode}  quality=${quality}`];
+    if (keyHelp) L.push(keyHelp);
+    if (clickHelp) L.push(clickHelp);
 
     // Diagnostics, hidden until Alt+G: this image's outcome first, then the context.
     if (detailsVisible) {
       const img = hudTarget();
       const s = img && state.get(img);
       if (s) {
-        L.push(`status  ${s.status}`);
+        L.push(`status  ${statusOf(s)}`);
         L.push(`source  ${s.nw}x${s.nh}`);
-        if (s.report) {
+        if (s.report && eligible(s)) {
           L.push(`output  ${s.report.w}x${s.report.h} device px (${Math.round((s.report.w / vp.w) * 100)}% width)`);
           L.push(`factor  ${s.report.factor.toFixed(4)}` +
                  (s.forcedMode ? `  [${s.forcedMode}${s.anchor ? ', ' + s.anchor + '-anchored' : ''}]` : ''));
@@ -1494,7 +2059,9 @@ void main() {
              (IMAGE_DOC ? '   [chrome image doc]' : ''));
     }
 
-    hud.textContent = L.join('\n');
+    // Rewritten only when it changes: every write is a layout and a paint of its own.
+    const text = L.join('\n');
+    if (hud.textContent !== text) hud.textContent = text;
   }
 
   /* ================================================================== */
@@ -1520,19 +2087,28 @@ void main() {
     memory: () => ({ blobs: blobs.size, mb: +(blobBytes / 1e6).toFixed(2),
                      budgetMb: CFG.blobBudget / 1e6 }),
     state: (img) => state.get(img || document.images[0]),
+    // The band fit-width fills for this image, in css px from the window's left edge:
+    // cbL..cbR is its column, L..R the free width around it. null = the window.
+    layout: (img) => {
+      const s = state.get(img || document.images[0]);
+      columnsAt = 0;
+      return s ? layoutOf(img || document.images[0], s.nw, s.nh) : null;
+    },
     report: () => [...document.images].map((img) => {
       const s = state.get(img);
       return s ? {
-        id: s.id, src: s.origUrl.slice(0, 60), natural: `${s.nw}x${s.nh}`,
-        origin: originKind(s.origUrl),
+        id: s.id, src: (s.origUrl || img.src).slice(0, 60), natural: `${s.nw}x${s.nh}`,
+        origin: originKind(s.origUrl || img.src),
         output: s.report ? `${s.report.w}x${s.report.h} @${s.report.factor.toFixed(3)}` : '-',
-        status: s.status,
+        status: statusOf(s),
       } : { src: (img.currentSrc || img.src).slice(0, 60), status: 'not tracked' };
     }),
     get mode() { return mode; },
     set mode(v) { mode = v; invalidateAll(); },
     get quality() { return quality; },
     set quality(v) { quality = v; invalidateAll(); },
+    get fitWidth() { return CFG.fitWidth; },
+    set fitWidth(v) { CFG.fitWidth = v; columnsAt = 0; invalidateAll(); },
     get trace() { return trace; },
     set trace(v) { trace = !!v; },
     // Selectors for wrappers the site sized to the old image, matched upward from each
