@@ -15,9 +15,9 @@ These load and resize, but something about the site limits what the script can d
 | Site        | URL                               | NSFW? | Works | Issue |
 |:----------- |:--------------------------------- |:-----:|:-----:|:----- |
 | MangaPlus   | https://mangaplus.shueisha.co.jp/ | No    | **Fixed in 3.15** | The site takes back each page's image data once it has loaded, so switching filter (`Alt+Q`) or size (`Alt+M`) used to fail. Since 3.15 the script keeps its own copy and every switch works |
-| E-Hentai    | https://e-hentai.org/             | Yes   | Sizing only | **Lanczos3 cannot run here**: pages come from a separate host that does not let scripts read them, so the browser blocks any userscript from resampling them. `nearest` still works. Since 3.19 the image fills the whole width, without the thin gaps at its sides. In the multi-page viewer it fills the site's image pane, which leaves 2-3 px at the edges |
+| E-Hentai    | https://e-hentai.org/             | Yes   | Sizing only | **Lanczos3 cannot run here**: pages come from a separate host that does not let scripts read them, so the browser blocks any userscript from resampling them. `nearest` still works. Since 4.0 the image fills the whole width, without the thin gaps at its sides. In the multi-page viewer it fills the site's image pane, which leaves 2-3 px at the edges |
 | ExHentai    | https://exhentai.org/             | Yes   | Sizing only | Same as E-Hentai: same site software |
-| Tapas       | https://tapas.io/                 | No    | Sizing | Since 3.19 the page fills the width instead of sitting in a narrow column with empty bars at both sides, and stays clear of the side panel when it is open. Tested on a saved copy of the page, not yet on the live site |
+| Tapas       | https://tapas.io/                 | No    | Sizing | Since 4.0 the page fills the width instead of sitting in a narrow column with empty bars at both sides, and stays clear of the side panel when it is open. Tested on a saved copy of the page, not yet on the live site |
 | WEBTOON     | https://www.webtoons.com/         | No    | Off by default | Its page strips are 700 px wide, under the default size filter (`minNaturalWidth: 800`), so they are left alone. The overlay says so. Set `minNaturalWidth: 690` to include them |
 
 ## Doesn't work on
