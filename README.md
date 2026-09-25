@@ -10,7 +10,7 @@ This script redraws those images with a proper **Lanczos3** filter on your GPU, 
 
 Check out the real-world comparisons below! The improved perceptual image quality is there.
 
-Built for reading manga and comics. Works on any image, [anywhere](https://github.com/Ikkoru/crisp-images#Privacy). Contains features useful for any scaling, even the default 100% scaling!
+Built for reading manga and comics. Works on any image, [anywhere](#-Privacy). Contains features useful for any scaling, even the default 100% scaling!
 
 ## Install
 
@@ -37,7 +37,7 @@ Enlarging one image never nudges the others left or right.
 
 ## A note on memory
 
-Resampled images are kept in memory so switching filters or scrolling back stays instant. That's up to 64 MB per tab, which is fine for a handful of tabs. Keep a lot of image-heavy tabs open with the script active at once and it adds up, so you may want to tidy up now and then.
+Resampled images and, on sites that release their own image data, a copy of the original are kept in memory so switching filters or scrolling back stays instant. That's up to 64 MB per tab, which is fine for a handful of tabs. Keep a lot of image-heavy tabs open with the script active at once and it adds up, so you may want to tidy up now and then.
 
 Easiest ways to keep it in check:
 
@@ -60,7 +60,7 @@ Edit the `CFG` block at the top of the script.
 | `quality`                              | `lanczos3`  | Filter to start with                                                                                      |
 | `fitHeightToo`                         | `false`     | Fit the height as well, so a whole page fits on screen                                                    |
 | `maxOutputPixels`                      | 64M         | Don't resample beyond this many output pixels                                                             |
-| `blobBudget`                           | 64MB        | Memory to spend keeping resampled images ready                                                            |
+| `blobBudget`                           | 64MB        | Memory to spend keeping resampled images ready ([with caveats](#-A-note-on-memory))                       |
 | `lazyMargin`                           | 1.5         | How many screenfuls beyond the window to prepare images so they are ready before you scroll to them       |
 
 ## Local files
@@ -112,6 +112,7 @@ Bilinear (browser):<br>
 
 Nearest Neighbour:<br>
 <img src="comparisons/bw_fit-screen_nearest_2530x3598.png" alt="Nearest Neighbour">
+
 </p>
 
 ## Why not just `image-rendering: pixelated`?
@@ -136,9 +137,28 @@ The two passes keep their intermediate result in a half-float texture. An 8-bit 
 ## Limitations
 
 - It swaps the image's `src` for a resampled copy. A site that manages that element itself may fight it; `Alt+P` turns the script off for that site.
-- Images from another domain need CORS headers before the GPU can read them. Without those, the script leaves them alone.
+- Images from another domain need [CORS headers](#-When-a-site-won't-let-the-script-resample) before the GPU can read them. Without those, the script leaves them alone.
 - The first time an image is drawn at a given size and filter costs a moment. Repeats come from memory.
 - Where the GPU can't be used, `nearest` falls back to CSS.
+
+## When a site won't let the script resample
+
+On most sites the script reads the image, resamples it, and puts the sharper version back. On a few, the browser won't let it read the image at all. When that happens the overlay says something like:
+
+    chrome bilinear — cross-origin, and the image host sends no CORS headers
+
+This is a browser security rule, not a fault on anyone's part, and there's nothing the script can do about it from inside the page. The only way to fix this would mean requesting additional permissions from the user (You!) and this would make the script much more suspicious.
+
+**What still works on those sites**
+
+- Sizing — the image is laid out at the size you asked for.
+- `nearest` (`Alt+Q`) — it's a CSS filter, so it never reads pixels.
+
+**What doesn't**
+
+- Lanczos3, which is the main thing the script is for.
+
+If a site looks untouched and you're not sure why, press `Alt+H` and read the status line.
 
 ## Something looks wrong?
 
