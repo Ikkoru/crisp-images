@@ -30,6 +30,7 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 | `Alt+Q`                             | Filter: Lanczos3 → nearest → browser. Same size each time, so you can compare                   |
 | `Alt+H`                             | Show or hide the info overlay. Remembered per site                                              |
 | `Alt+G`                             | Show or hide the overlay's diagnostic rows (size, factor, status, memory)                       |
+| `Alt+[` / `Alt+]`                   | Narrower / wider black bars at the sides of each image, 0.5% of the window a step. Remembered per site |
 | `Alt` + left click<br/>on an image  | Show that one image at one image pixel per screen pixel                                         |
 | `Alt` + right click<br/>on an image | Show that one image at twice its own resolution                                                 |
 
@@ -38,6 +39,7 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 - Keys do nothing while you are typing in a text field.
 - Click shortcuts work even when the site puts an invisible overlay over its pages. Any other click is left alone, so `Alt` + click on a link still downloads it.
 - Enlarging one image never moves the others sideways.
+- The side bars count as part of the image: the image shrinks to make room, so nothing else on the page moves. They apply in fit-width and whole-number zoom.
 
 ## Filling the width
 
@@ -70,10 +72,12 @@ Edit the `CFG` block at the top of the script.
 | `quality`                              | `lanczos3`  | Filter to start with                                                                                      |
 | `fitWidth`                             | `space`     | What "fit width" fills: all the free width (`space`), the site's column (`container`), or the window (`window`) |
 | `fitHeightToo`                         | `false`     | Fit the height as well, so a whole page fits on screen                                                    |
+| `sideBars`                             | 0           | Black bars at the left and right of each image, as a percentage of the window's width on each side. `Alt+[` / `Alt+]` change it |
+| `viewerHeight`                         | 0.9         | On readers whose pages sit in a fixed-height viewer box (K MANGA): its height as a share of the window. `0` keeps the site's |
 | `maxOutputPixels`                      | 64M         | Don't resample beyond this many output pixels                                                             |
 | `blobBudget`                           | 64 MB       | Memory for keeping resampled images ready ([see above](#a-note-on-memory))                                |
 | `lazyMargin`                           | 1.5         | How many screenfuls ahead to get images ready, so they are done before you scroll to them                 |
-| `keyToggle`, `keyMode`, `keyQuality`, `keyOverlay`, `keyDetails` | `Alt+P` ... | Keyboard shortcuts, like `'Ctrl+Shift+K'` or `'F2'`. `''` turns one off          |
+| `keyToggle`, `keyMode`, `keyQuality`, `keyOverlay`, `keyDetails`, `keyBarsLess`, `keyBarsMore` | `Alt+P` ... | Keyboard shortcuts, like `'Ctrl+Shift+K'` or `'F2'`. `''` turns one off          |
 | `clickNative`, `clickDouble`           | `Alt+LeftClick`, `Alt+RightClick` | Click shortcuts: modifiers plus `LeftClick`, `RightClick` or `MiddleClick`          |
 
 ## Local files

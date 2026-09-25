@@ -89,6 +89,17 @@
     // true:  fit the height too, so the whole image is on screen at once.
     fitHeightToo: false,
 
+    // Black bars at the left and right of each image, as a percentage of the window's
+    // width on each side. The image shrinks to make room, so nothing else on the page
+    // moves. In 'fit-width' and 'integer'. The bar keys below change it 0.5 a step, and
+    // what you set is remembered per site. 0: no bars.
+    sideBars: 0,
+
+    // Readers whose pages sit in a fixed-height viewer box (K MANGA): that box's height,
+    // as a share of the window's height. 0.9 leaves a tenth of the window for the rest
+    // of the page; everything below the viewer moves down. 0: the site's own height.
+    viewerHeight: 0.9,
+
     // Largest image to resample, in pixels (64 megapixels). Bigger ones are left to
     // the browser.
     maxOutputPixels: 64e6,
@@ -117,6 +128,8 @@
     keyQuality:  'Alt+Q',           // next filter: lanczos3, nearest, browser
     keyOverlay:  'Alt+H',           // show or hide the overlay
     keyDetails:  'Alt+G',           // show or hide the overlay's diagnostic rows
+    keyBarsLess: 'Alt+[',           // narrower side bars (see sideBars)
+    keyBarsMore: 'Alt+]',           // wider side bars
     clickNative: 'Alt+LeftClick',   // this image at one image pixel per screen pixel
     clickDouble: 'Alt+RightClick',  // this image at twice its own resolution
 
@@ -135,7 +148,16 @@
     try { localStorage.setItem(HOST_KEY(k), v ? '1' : '0'); } catch { /* private mode */ }
   };
 
+  const readNumber = (k, d) => {
+    try { const v = parseFloat(localStorage.getItem(HOST_KEY(k))); return Number.isFinite(v) ? v : d; }
+    catch { return d; }
+  };
+  const writeNumber = (k, v) => {
+    try { localStorage.setItem(HOST_KEY(k), String(v)); } catch { /* private mode */ }
+  };
+
   let enabled = readFlag('enabled', CFG.enabledOnStart);
+  let bars = readNumber('bars', CFG.sideBars);   // percent of the window's width, each side
   let hudVisible = readFlag('hud', CFG.hudOnStart);
   // Not per site: localStorage belongs to one origin, so it cannot hold a choice for
   // every site. That would need GM_setValue, and granting anything moves the script into
@@ -667,18 +689,20 @@ void main() {
     // but never wider than a scroller the image sits in.
     const lay = layoutOf(img, nw, nh);
     const room = lay ? lay.R - lay.L : scrollerWidth(img);
-    const avail = room ? Math.max(1, Math.min(vp.w, Math.floor(room * vp.r))) : vp.w;
+    // Side bars come out of that width, in whole device px so the image stays on the grid.
+    const bar = Math.round(bars / 100 * innerWidth * vp.r);
+    const avail = Math.max(1, (room ? Math.min(vp.w, Math.floor(room * vp.r)) : vp.w) - 2 * bar);
 
     if (m === 'integer') {
       let k = Math.floor(avail / nw);
       if (CFG.fitHeightToo) k = Math.min(k, Math.floor(vp.h / nh));
       k = Math.max(1, Math.min(k, 8));
-      return { w: nw * k, h: nh * k, factor: k, lay };
+      return { w: nw * k, h: nh * k, factor: k, lay, bar };
     }
 
     let f = avail / nw;
     if (CFG.fitHeightToo) f = Math.min(f, vp.h / nh);
-    return { w: Math.round(nw * f), h: Math.round(nh * f), factor: f, lay };
+    return { w: Math.round(nw * f), h: Math.round(nh * f), factor: f, lay, bar };
   }
 
   /* ================================================================== *
@@ -1164,38 +1188,62 @@ void main() {
   const MPV = /(^|\.)(e-hentai|exhentai)\.org$/.test(location.hostname) &&
               /^\/mpv\//.test(location.pathname);
   const PANE = [['left', '-2px'], ['width', '100%']];
-  const paneSaved = new WeakMap();   // pane -> { prop: [site value, priority, ours] }
 
   function mpvPane(img, on) {
     const pane = MPV && img.closest('#pane_images');
     if (!pane) return;
     const thumbs = document.getElementById('pane_thumbs');
-    const want = on && !(thumbs && getComputedStyle(thumbs).display !== 'none');
-    let saved = paneSaved.get(pane);
-    if (want) {
-      if (!saved) { saved = {}; paneSaved.set(pane, saved); }
-      for (const [p, v] of PANE) {
-        const cur = pane.style.getPropertyValue(p);
-        if (saved[p] && cur === saved[p][2]) continue;
-        saved[p] = [cur, pane.style.getPropertyPriority(p)];
-        pane.style.setProperty(p, v, 'important');
-        saved[p][2] = pane.style.getPropertyValue(p);
-        columnsAt = 0;
+    const open = thumbs && getComputedStyle(thumbs).display !== 'none';
+    override(pane, on && !open ? PANE : null);
+  }
+
+  // K MANGA shows its pages in a viewer box whose height it sets to fit one page. That
+  // box becomes viewerHeight of the window, pushing the rest of the page down.
+  const VIEWER_RULES = [
+    { host: /(^|\.)kmanga\.kodansha\.com$/, selector: '.c-viewer__content' },
+  ];
+  const VIEWER_SEL =
+    (VIEWER_RULES.find((r) => r.host.test(location.hostname)) || {}).selector || null;
+
+  function viewerBox(img, on) {
+    const box = VIEWER_SEL && img.closest(VIEWER_SEL);
+    if (!box) return;
+    const h = Math.round(CFG.viewerHeight * innerHeight);
+    // Its stylesheet also caps it (max-height: 800px).
+    override(box, on && h > 0 ? [['height', h + 'px'], ['max-height', 'none']] : null);
+  }
+
+  // Inline styles set on an element of the page's (not the image), remembering the
+  // page's own values. Given back with null - unless the page has written newer ones
+  // since, which stay.
+  const overrides = new WeakMap();   // element -> { prop: [page value, priority, ours] }
+
+  function override(el, props) {
+    let saved = overrides.get(el);
+    if (props) {
+      if (!saved) { saved = {}; overrides.set(el, saved); }
+      for (const [p, v] of props) {
+        const cur = el.style.getPropertyValue(p);
+        if (!saved[p] || cur !== saved[p][2]) saved[p] = [cur, el.style.getPropertyPriority(p)];
+        el.style.setProperty(p, v, 'important');
+        const ours = el.style.getPropertyValue(p);
+        if (ours !== saved[p][2]) { saved[p][2] = ours; columnsAt = 0; }
       }
     } else if (saved) {
       for (const p in saved) {
         const [v, pri, ours] = saved[p];
-        if (pane.style.getPropertyValue(p) !== ours) continue;
-        pane.style.removeProperty(p);
-        if (v) pane.style.setProperty(p, v, pri);
+        if (el.style.getPropertyValue(p) !== ours) continue;
+        el.style.removeProperty(p);
+        if (v) el.style.setProperty(p, v, pri);
       }
-      paneSaved.delete(pane);
+      overrides.delete(el);
       columnsAt = 0;
     }
   }
 
   function relaxContainers(img) {
     mpvPane(img, true);
+    viewerBox(img, true);
     if (!CONTAINERS) return;
     for (const sel of CONTAINERS) {
       const el = img.closest(sel);
@@ -1216,6 +1264,7 @@ void main() {
 
   function unrelaxContainers(img) {
     mpvPane(img, false);
+    viewerBox(img, false);
     if (!CONTAINERS) return;
     for (const sel of CONTAINERS) {
       const el = img.closest(sel);
@@ -1242,7 +1291,8 @@ void main() {
   // arrived later - and is what gets put back.
   const OWN_PROPS = ['width', 'height', 'max-width', 'max-height', 'min-width', 'min-height',
                      'margin-left', 'margin-right', 'image-rendering', 'transform',
-                     'vertical-align'];
+                     'vertical-align', 'box-sizing', 'padding-left', 'padding-right',
+                     'background-color'];
 
   function setOwn(img, s, prop, value) {
     const st = img.style;
@@ -1297,6 +1347,19 @@ void main() {
     setOwn(img, s, 'width', cssW + 'px');
     setOwn(img, s, 'height', cssH + 'px');
 
+    // Side bars: black padding on the element itself, so to the page they are part of the
+    // image. content-box, or a site's border-box rule would take them out of the image.
+    const bar = (t.bar || 0) / d;
+    const outW = cssW + 2 * bar;
+    if (bar > 0) {
+      setOwn(img, s, 'box-sizing', 'content-box');
+      setOwn(img, s, 'padding-left', bar + 'px');
+      setOwn(img, s, 'padding-right', bar + 'px');
+      setOwn(img, s, 'background-color', '#000');
+    } else {
+      for (const p of ['box-sizing', 'padding-left', 'padding-right', 'background-color']) dropOwn(img, s, p);
+    }
+
     // An image wider than its column must not move anything else. Negative margins keep
     // its MARGIN box at the width the layout gave it, so the column never grows and
     // everything else keeps its x position; the image itself paints past the column.
@@ -1307,7 +1370,7 @@ void main() {
       // A per-image override keeps the slot the image had before: the whole column if
       // fit-width had spread past it, else the image's own width.
       const base = targetSize(img, s.nw, s.nh, null);
-      const baseW = base.w / d;
+      const baseW = (base.w + 2 * (base.bar || 0)) / d;
       const colW = base.lay ? base.lay.cbR - base.lay.cbL : Infinity;
       const extra = cssW - Math.min(baseW, colW);
       if (extra > 0.5) {
@@ -1329,10 +1392,10 @@ void main() {
       // Placed by us - centred in the free band, which fit-width fills exactly - whenever
       // the page's alignment would get it wrong: the image is wider than its column, or
       // part of the column is off limits (Webtoons' column runs past the window's edge).
-      if (cssW > colW + 0.5 || L > cbL + 0.5 || R < cbR - 0.5) {
-        const l = L + (R - L - cssW) / 2 - cbL;
+      if (outW > colW + 0.5 || L > cbL + 0.5 || R < cbR - 0.5) {
+        const l = L + (R - L - outW) / 2 - cbL;
         ml = `${l}px`;
-        mr = `${colW - cssW - l}px`;
+        mr = `${colW - outW - l}px`;
       }
     }
     if (ml !== null) setOwn(img, s, 'margin-left', ml); else dropOwn(img, s, 'margin-left');
@@ -1993,6 +2056,7 @@ void main() {
     toggle: parseShortcut(CFG.keyToggle), mode: parseShortcut(CFG.keyMode),
     quality: parseShortcut(CFG.keyQuality), overlay: parseShortcut(CFG.keyOverlay),
     details: parseShortcut(CFG.keyDetails),
+    barsLess: parseShortcut(CFG.keyBarsLess), barsMore: parseShortcut(CFG.keyBarsMore),
   };
   const BUTTONS = { leftclick: 0, middleclick: 1, rightclick: 2 };
   const CLICKS = [['native', parseShortcut(CFG.clickNative)], ['double', parseShortcut(CFG.clickDouble)]]
@@ -2005,11 +2069,19 @@ void main() {
   // Latin letter with Option on a Mac ('π' for P) or on a Russian layout ('з'), so letters
   // and digits fall back to the key's position. A Latin letter in e.key still wins, so on
   // AZERTY or Dvorak you press the key marked with the letter.
+  // Punctuation keys by position, for layouts where they type something else (the '['
+  // key types 'х' on a Russian layout, 'ü' on a German one).
+  const CODE_KEYS = { BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=',
+                      Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/',
+                      Backslash: '\\', Backquote: '`' };
+
   function keyName(e) {
     const k = (e.key || '').toLowerCase();
     if (/^[a-z0-9]$/.test(k)) return k;
     const m = /^(?:Key|Digit)([A-Z0-9])$/.exec(e.code || '');
-    return m ? m[1].toLowerCase() : k;
+    if (m) return m[1].toLowerCase();
+    if (e.code in CODE_KEYS && !/^[\x21-\x7e]$/.test(k)) return CODE_KEYS[e.code];
+    return k;
   }
 
   const pressed = (b, e) => !!b && sameModifiers(b, e) && keyName(e) === b.key;
@@ -2091,6 +2163,13 @@ void main() {
     else if (pressed(KEYS.details, e)) { detailsVisible = !detailsVisible; focus = null; updateHud(); }
     else if (pressed(KEYS.mode, e)) { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; invalidateAll(); updateHud(); }
     else if (pressed(KEYS.quality, e)) { quality = QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]; invalidateAll(); updateHud(); }
+    else if (enabled && (pressed(KEYS.barsLess, e) || pressed(KEYS.barsMore, e))) {
+      const step = pressed(KEYS.barsMore, e) ? 0.5 : -0.5;
+      bars = Math.max(0, Math.min(25, Math.round((bars + step) * 2) / 2));
+      writeNumber('bars', bars);
+      invalidateAll();
+      updateHud();
+    }
     else return;
     e.preventDefault();
   });
@@ -2144,11 +2223,13 @@ void main() {
     // Always shown: what the script is doing, and the shortcuts as configured, each named
     // by what it will do.
     const keyHelp = [[KEYS.toggle, enabled ? 'off' : 'on'], [KEYS.mode, 'mode'],
-      [KEYS.quality, 'quality'], [KEYS.overlay, 'hud'], [KEYS.details, 'details']]
+      [KEYS.quality, 'quality'], [KEYS.overlay, 'hud'], [KEYS.details, 'details'],
+      [KEYS.barsLess, 'bars-'], [KEYS.barsMore, 'bars+']]
       .filter(([b]) => b).map(([b, what]) => `${b.text} ${what}`).join('  ');
     const clickHelp = CLICKS.map(([what, b]) => `${b.text} = ${what === 'native' ? '1:1' : '2x native'}`)
       .join('   ');
-    const L = [`crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode === 'fit-width' ? `fit-width ${CFG.fitWidth}` : mode}  quality=${quality}`];
+    const L = [`crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode === 'fit-width' ? `fit-width ${CFG.fitWidth}` : mode}  quality=${quality}` +
+               (bars > 0 ? `  bars=${bars}%` : '')];
     if (keyHelp) L.push(keyHelp);
     if (clickHelp) L.push(clickHelp);
 
