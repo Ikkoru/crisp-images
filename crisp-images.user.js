@@ -6,7 +6,7 @@
 // @name:es           Crisp Images - corrige imágenes borrosas en pantallas HiDPI / 4K
 // @name:pt-BR        Crisp Images - corrige imagens borradas em telas HiDPI / 4K
 // @namespace    https://github.com/Ikkoru/crisp-images
-// @version      4.0
+// @version      4.1
 // @description  Images look blurry on a 4K/HiDPI screen over 100% display scaling, or on Retina? The browser upscales them with a cheap bilinear filter. This resamples them with a real Lanczos3 filter on the GPU instead. No third-party requests; nothing leaves your browser. Built for manga, comics, and webtoons, works anywhere.
 // @description:ja    4KやHiDPIディスプレイで、表示スケールが100%を超えるときやRetina環境で、画像がぼやけて見えませんか？ブラウザは安価なバイリニア補間で拡大しています。このスクリプトはGPU上で本物のLanczos3フィルターを使って再サンプリングし、くっきり表示します。第三者への通信は一切なし。漫画・コミック向けですが、どんな画像にも使えます。
 // @description:zh-CN 在4K或高DPI屏幕上、缩放高于100%时，或在Retina屏上，图片看起来模糊？浏览器用廉价的双线性插值放大它们。本脚本改用GPU上真正的Lanczos3滤镜重新采样。无第三方请求，数据不会离开浏览器。为漫画阅读而生，适用于任何图片。
@@ -55,8 +55,8 @@
     detailsOnStart: false,
 
     // Leave an image alone unless it is at least this wide AND this tall, in image
-    // pixels. Keeps avatars, icons and banners out.
-    minNaturalWidth: 800,
+    // pixels. Keeps avatars, icons and banners out. 700 lets in Webtoons' 700px strips.
+    minNaturalWidth: 700,
     minNaturalHeight: 1066,
 
     // How big to draw images:
@@ -148,7 +148,7 @@
   // can see whether Tampermonkey runs the copy you just edited.
   // KEEP IN STEP WITH @version ABOVE. Under `@grant none` a script cannot read its own
   // header (GM_info needs a grant), so this is kept by hand.
-  const VERSION = '4.0';
+  const VERSION = '4.1';
 
   const dpr = () => window.devicePixelRatio || 1;
 
@@ -163,7 +163,7 @@
 
   const GL = (() => {
     let cv = null, gl = null, prog = null, loc = null, vao = null;
-    let fboTex = null, fbo = null, broken = false, why = '', halfFloat = false;
+    let fboTex = null, fbo = null, broken = false, why = '', halfFloat = false, hfFailed = false;
     let maxDim = 0;
 
     const VERT = `#version 300 es
@@ -176,6 +176,9 @@ void main() {
 
     const FRAG = `#version 300 es
 precision highp float;
+// Samplers default to lowp in fragment shaders. Desktop GPUs ignore that; mobile ones
+// may not, and the half-float intermediate holds values lowp cannot.
+precision highp sampler2D;
 uniform sampler2D u_tex;
 uniform vec2  u_srcSize;
 uniform vec2  u_dstSize;
@@ -294,6 +297,7 @@ void main() {
 
         fboTex = gl.createTexture();
         fbo = gl.createFramebuffer();
+        if (halfFloat && !halfFloatWorks()) { halfFloat = false; hfFailed = true; }
         return true;
       } catch (e) {
         broken = true;
@@ -322,6 +326,110 @@ void main() {
       gl.uniform1f(loc.scale, dirX ? dstW / srcW : dstH / srcH);
       gl.uniform1i(loc.kernel, kernel);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    // A GPU can advertise a half-float render target and still get it wrong: on a Pixel 10
+    // Pro Fold (PowerVR D-Series, Android Edge) the result came out corrupted (GitHub
+    // issue #1). So before the 16-bit path is used, it resamples a small pattern with hard
+    // edges, and the result must match the same filter worked out here in 64-bit floats.
+    // If it does not, the 8-bit intermediate is used: it clips Lanczos's overshoot at
+    // hard edges, but draws correctly.
+    function halfFloatWorks() {
+      const sw = 12, sh = 8, dw = 29, dh = 19;
+      const src = new Uint8Array(sw * sh * 4);
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          const i = (y * sw + x) * 4;
+          src[i] = (x + y) % 2 ? 255 : 0;              // 1px checkerboard: overshoot everywhere
+          src[i + 1] = x % 3 ? 255 : 0;                // 1px lines
+          src[i + 2] = Math.round(255 * x / (sw - 1)); // a ramp
+          src[i + 3] = 255;
+        }
+      }
+      let tex = null;
+      try {
+        cv.width = dw;
+        cv.height = dh;
+        tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        clampTex();
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sw, sh, 0, gl.RGBA, gl.UNSIGNED_BYTE, src);
+        gl.bindTexture(gl.TEXTURE_2D, fboTex);
+        clampTex();
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, dw, sh, 0, gl.RGBA, gl.HALF_FLOAT, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) return false;
+        gl.useProgram(prog);
+        gl.bindVertexArray(vao);
+        pass(tex, sw, sh, dw, sh, 1, 0, fbo, 0);
+        pass(fboTex, dw, sh, dw, dh, 0, 1, null, 0);
+        // Unflipped upload and bottom-up readPixels cancel out: row r here is output row r.
+        const got = new Uint8Array(dw * dh * 4);
+        gl.readPixels(0, 0, dw, dh, gl.RGBA, gl.UNSIGNED_BYTE, got);
+        if (gl.getError() !== gl.NO_ERROR) return false;
+        const want = lanczosCPU(src, sw, sh, dw, dh);
+        // A correct GPU is within 1-2 levels (shader-selftest.html); corruption is not.
+        for (let i = 0; i < got.length; i++) if (Math.abs(got[i] - want[i]) > 3) return false;
+        return true;
+      } catch {
+        return false;
+      } finally {
+        if (tex) gl.deleteTexture(tex);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
+    }
+
+    // The shader's filter, on the CPU: horizontal pass kept in full precision, then
+    // vertical, rounded to 8 bits at the end as the canvas does.
+    function lanczosCPU(src, sw, sh, dw, dh) {
+      const kernel = (x) => {
+        x = Math.abs(x);
+        if (x >= 3) return 0;
+        if (x < 1e-6) return 1;
+        const p = Math.PI * x, q = p / 3;
+        return (Math.sin(p) / p) * (Math.sin(q) / q);
+      };
+      // For each output index: [source index, weight] pairs, weights summing to 1.
+      const taps = (n, m) => {
+        const scale = m / n, fs = Math.max(1, 1 / scale), support = 3 * fs, all = [];
+        for (let o = 0; o < m; o++) {
+          const c = (o + 0.5) / scale, t = [];
+          let sum = 0;
+          for (let j = Math.floor(c - support - 0.5); j <= Math.ceil(c + support - 0.5); j++) {
+            const w = kernel((c - (j + 0.5)) / fs);
+            if (w === 0) continue;
+            t.push([Math.min(n - 1, Math.max(0, j)), w]);
+            sum += w;
+          }
+          all.push(t.map(([j, w]) => [j, w / sum]));
+        }
+        return all;
+      };
+      const hx = taps(sw, dw), vy = taps(sh, dh);
+      const mid = new Float64Array(dw * sh * 4);
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < dw; x++) {
+          for (let c = 0; c < 4; c++) {
+            let v = 0;
+            for (const [j, w] of hx[x]) v += w * src[(y * sw + j) * 4 + c];
+            mid[(y * dw + x) * 4 + c] = v;
+          }
+        }
+      }
+      const out = new Uint8Array(dw * dh * 4);
+      for (let y = 0; y < dh; y++) {
+        for (let x = 0; x < dw; x++) {
+          for (let c = 0; c < 4; c++) {
+            let v = 0;
+            for (const [j, w] of vy[y]) v += w * mid[(j * dw + x) * 4 + c];
+            out[(y * dw + x) * 4 + c] = Math.max(0, Math.min(255, Math.round(v)));
+          }
+        }
+      }
+      return out;
     }
 
     function resample(source, srcW, srcH, dstW, dstH, kernelName) {
@@ -367,7 +475,9 @@ void main() {
     }
 
     return {
-      resample, ok: () => init(), why: () => why, precision: () => (halfFloat ? '16f' : '8bit'),
+      resample, ok: () => init(), why: () => why,
+      precision: () => (halfFloat ? '16f intermediate'
+        : hfFailed ? '8bit intermediate: 16f failed its self-test' : '8bit intermediate'),
       maxDim: () => (init() ? maxDim : 0),
     };
   })();
@@ -964,6 +1074,9 @@ void main() {
   //   kmanga        div.c-viewer__page   height:800px; width:561.8px; overflow:hidden
   //   e-hentai MPV  div#image_N.mimg     height:1424px; max-width:994px
   //   e-hentai /s/  div#i1.sni           width:994px
+  //   Webtoons      div.viewer_lst       overflow:hidden, a 1200px column in a 1400px
+  //                                      page, so the image stopped 67-100px short of
+  //                                      each window edge
   //
   // A list per site, not a general rule: a general rule would have to guess which
   // wrappers are safe to touch, and on these same sites a wrong guess breaks more than
@@ -972,6 +1085,7 @@ void main() {
   const CONTAINER_RULES = [
     { host: /(^|\.)kmanga\.kodansha\.com$/,       selectors: ['.c-viewer__page'] },
     { host: /(^|\.)(e-hentai|exhentai)\.org$/,    selectors: ['.mimg', '#i1'] },
+    { host: /(^|\.)webtoons\.com$/,               selectors: ['.viewer_lst'] },
   ];
   // Settable from the console via __crispImages.containers, to find a working selector
   // for an unlisted site without editing the script.
@@ -985,7 +1099,46 @@ void main() {
   const RELAX_PROPS = Object.keys(RELAX);
   const relaxedEls = new WeakMap();   // element -> its inline values before we touched it
 
+  // e-hentai's multi-page viewer: its image pane (#pane_images) clips, starts 2px in (the
+  // body's padding) and is set 5px narrower than the window, so a full-width image kept
+  // 2-3px gaps. While the thumbnail pane is closed, the pane is stretched over the whole
+  // window. With thumbnails open, or when switched off, the site's values go back,
+  // unless the site has written newer ones, which stay.
+  const MPV = /(^|\.)(e-hentai|exhentai)\.org$/.test(location.hostname) &&
+              /^\/mpv\//.test(location.pathname);
+  const PANE = [['left', '-2px'], ['width', '100%']];
+  const paneSaved = new WeakMap();   // pane -> { prop: [site value, priority, ours] }
+
+  function mpvPane(img, on) {
+    const pane = MPV && img.closest('#pane_images');
+    if (!pane) return;
+    const thumbs = document.getElementById('pane_thumbs');
+    const want = on && !(thumbs && getComputedStyle(thumbs).display !== 'none');
+    let saved = paneSaved.get(pane);
+    if (want) {
+      if (!saved) { saved = {}; paneSaved.set(pane, saved); }
+      for (const [p, v] of PANE) {
+        const cur = pane.style.getPropertyValue(p);
+        if (saved[p] && cur === saved[p][2]) continue;
+        saved[p] = [cur, pane.style.getPropertyPriority(p)];
+        pane.style.setProperty(p, v, 'important');
+        saved[p][2] = pane.style.getPropertyValue(p);
+        columnsAt = 0;
+      }
+    } else if (saved) {
+      for (const p in saved) {
+        const [v, pri, ours] = saved[p];
+        if (pane.style.getPropertyValue(p) !== ours) continue;
+        pane.style.removeProperty(p);
+        if (v) pane.style.setProperty(p, v, pri);
+      }
+      paneSaved.delete(pane);
+      columnsAt = 0;
+    }
+  }
+
   function relaxContainers(img) {
+    mpvPane(img, true);
     if (!CONTAINERS) return;
     for (const sel of CONTAINERS) {
       const el = img.closest(sel);
@@ -1005,6 +1158,7 @@ void main() {
   }
 
   function unrelaxContainers(img) {
+    mpvPane(img, false);
     if (!CONTAINERS) return;
     for (const sel of CONTAINERS) {
       const el = img.closest(sel);
@@ -1348,7 +1502,7 @@ void main() {
           ? (Number.isInteger(t.factor)
               ? 'nearest (gpu) @ integer — valid'
               : 'nearest (gpu) @ FRACTIONAL — uneven rows expected')
-          : `lanczos3 (gpu, ${GL.precision()} intermediate)`;
+          : `lanczos3 (gpu, ${GL.precision()})`;
         if (cached) s.status += ' [cached]';
         // The site released its own image data; every later switch runs off our copy.
         if (s.safeUrl) s.status += ' [snapshot]';
@@ -1577,6 +1731,25 @@ void main() {
     pump();
   }
 
+  // Sweep again once a loading image arrives. Needed every time an image is caught
+  // loading, not just the first: a lazy loader (Webtoons) swaps a 1x1 placeholder for the
+  // page, the sweep that change triggers finds it still loading, and the file's arrival
+  // makes no DOM change. Listening only once left such pages 'skipped - 1x1' until a
+  // scroll or a key press.
+  const loadWait = new WeakSet();
+  function whenLoaded(img) {
+    if (loadWait.has(img)) return;
+    loadWait.add(img);
+    const done = () => {
+      loadWait.delete(img);
+      img.removeEventListener('load', done);
+      img.removeEventListener('error', done);
+      if (enabled) schedule();
+    };
+    img.addEventListener('load', done);
+    img.addEventListener('error', done);
+  }
+
   function sweep() {
     // Off means off: nothing is watched or recorded. Everything was handed back when the
     // script was switched off (see setEnabled).
@@ -1592,9 +1765,9 @@ void main() {
 
       for (const img of document.images) {
         if (img.complete && img.naturalWidth) record(img);
+        else if (!img.complete) whenLoaded(img);
         if (!watched.has(img)) {
           watched.add(img);
-          if (!img.complete) img.addEventListener('load', () => schedule(), { once: true });
           io.observe(img);
         }
       }
@@ -1895,7 +2068,7 @@ void main() {
       .filter(([b]) => b).map(([b, what]) => `${b.text} ${what}`).join('  ');
     const clickHelp = CLICKS.map(([what, b]) => `${b.text} = ${what === 'native' ? '1:1' : '2x native'}`)
       .join('   ');
-    const L = [`crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode}  quality=${quality}`];
+    const L = [`crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode === 'fit-width' ? `fit-width ${CFG.fitWidth}` : mode}  quality=${quality}`];
     if (keyHelp) L.push(keyHelp);
     if (clickHelp) L.push(clickHelp);
 
@@ -2001,6 +2174,15 @@ void main() {
   });
 
   addEventListener('resize', invalidateAll);
+  // A page wider than the window (Webtoons is 1400px) can be scrolled, or scrolled by
+  // its own script, sideways. The free band is measured against the window, so a
+  // sideways scroll moves it; vertical scrolling does not, and is left to the observers.
+  let lastScrollX = scrollX;
+  addEventListener('scroll', () => {
+    if (scrollX === lastScrollX) return;
+    lastScrollX = scrollX;
+    if (enabled) { columnsAt = 0; schedule(); }
+  }, { passive: true });
   window.visualViewport?.addEventListener('resize', invalidateAll);
   addEventListener('load', schedule);
   document.addEventListener('visibilitychange', () => {

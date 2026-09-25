@@ -65,7 +65,7 @@ Edit the `CFG` block at the top of the script.
 | `enabledOnStart`                       | `false`     | Start switched on for every site. Off means nothing happens until you press `Alt+P`                       |
 | `hudOnStart`                           | `true`      | Show the overlay when a page opens. `Alt+H` changes it, remembered per site                               |
 | `detailsOnStart`                       | `false`     | Show the overlay's diagnostic rows when a page opens. `Alt+G` toggles them until the page reloads         |
-| `minNaturalWidth` / `minNaturalHeight` | 800 / 1066  | Leave smaller images alone: avatars, icons, banners. Webtoons' 700-pixel strips need `minNaturalWidth: 690` |
+| `minNaturalWidth` / `minNaturalHeight` | 700 / 1066  | Leave smaller images alone: avatars, icons, banners. 700 is just wide enough for Webtoons' strips |
 | `mode`                                 | `fit-width` | Size to start with                                                                                        |
 | `quality`                              | `lanczos3`  | Filter to start with                                                                                      |
 | `fitWidth`                             | `space`     | What "fit width" fills: all the free width (`space`), the site's column (`container`), or the window (`window`) |
@@ -155,6 +155,7 @@ The two passes keep their in-between result in a half-float texture. An 8-bit on
 - Very tall images, over about 16,000 pixels once enlarged (long webtoon strips), are left to the browser's scaling. That is the most the GPU or the image format can take in one piece. The overlay says so.
 - The first time an image is drawn at a given size and filter costs a moment. Repeats come from memory.
 - Where the GPU can't be used, `nearest` falls back to CSS.
+- Some phone GPUs claim to support the 16-bit working texture the filter uses between its two passes, then draw it wrong (GitHub issue #1). Since 4.1 the script checks that texture against a small reference resample before using it, and falls back to 8 bits if it fails. 8 bits is slightly less exact at hard edges, but correct. The overlay's status says which one is in use.
 
 ## When a site won't let the script resample
 
