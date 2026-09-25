@@ -155,6 +155,7 @@ The two passes keep their in-between result in a half-float texture. An 8-bit on
 - Very tall images, over about 16,000 pixels once enlarged (long webtoon strips), are left to the browser's scaling. That is the most the GPU or the image format can take in one piece. The overlay says so.
 - The first time an image is drawn at a given size and filter costs a moment. Repeats come from memory.
 - Where the GPU can't be used, `nearest` falls back to CSS.
+- Pages drawn onto a `<canvas>` instead of shown as images are only handled on K MANGA, where they are sized but never resampled (see [supported sites](supported-sites.md)). Resizing just any canvas would break games, maps and charts.
 - Some phone GPUs claim to support the 16-bit working texture the filter uses between its two passes, then draw it wrong (GitHub issue #1). Since 4.1 the script checks that texture against a small reference resample before using it, and falls back to 8 bits if it fails. 8 bits is slightly less exact at hard edges, but correct. The overlay's status says which one is in use.
 
 ## When a site won't let the script resample

@@ -18,15 +18,12 @@ These load and resize, but something about the site limits what the script can d
 | E-Hentai    | https://e-hentai.org/             | Yes   | Sizing only | **Lanczos3 cannot run here**: pages come from a separate host that does not let scripts read them, so the browser blocks any userscript from resampling them. `nearest` still works. Since 4.0 the image fills the whole width, without the thin gaps at its sides. Since 4.1 the multi-page viewer does too: its image pane is stretched over the last 2-3 px while the thumbnail pane is closed |
 | ExHentai    | https://exhentai.org/             | Yes   | Sizing only | Same as E-Hentai: same site software |
 | Tapas       | https://tapas.io/                 | No    | Yes | Since 4.0 the page fills the width instead of sitting in a narrow column with empty bars at both sides, and stays clear of the side panel when it is open. Lanczos3 works: Tapas's image host allows it |
+| K MANGA     | https://kmanga.kodansha.com/      | No    | Sizing only, since 4.2 | K MANGA draws its pages onto a `<canvas>` instead of using ordinary images. Since 4.2 the script sizes those pages like images (`fit-width`, `integer`, `native`, the click shortcuts) and `nearest` works, but **Lanczos3 cannot run here**: that would mean reading back pixels the site drew itself, which the script does not do. `integer` with `nearest` shows its 960-pixel pages at an exact 2x. Tested on a saved copy of the page, not yet on the live site. The viewer also blanks its pages when the window loses focus; that is the site, not the script |
 | WEBTOON     | https://www.webtoons.com/         | No    | Since 4.1 | Its 700 px strips pass the size filter since 4.1 (it was 800), and fill the whole width: the site's column clipped them 67-100 px short of each edge. Also fixed: a strip could stay "skipped - 1x1" (the site's placeholder) until you scrolled or pressed a key. Since 4.2, `native` mode is no longer squashed: the site's minimum width for strips used to override the script's |
 
 ## Doesn't work on
 
-Some sites are out of reach by design rather than by oversight. Listed so you can stop looking for a setting that will fix it.
-
-| Site    | URL                          | NSFW? | Why not |
-|:------- |:---------------------------- |:-----:|:------- |
-| K MANGA | https://kmanga.kodansha.com/ | No    | K MANGA paints its pages onto a `<canvas>` instead of using ordinary images, and this script only works on images. The only real images in its viewer are the adverts, so if it ever looked like it was doing something there, that is what it was doing. The viewer also blanks its pages the moment the window loses focus. Nothing here is a fault you can configure around |
+Nothing listed at the moment. K MANGA used to be here; since 4.2 it is under Known issues.
 
 ## Notes
 

@@ -638,6 +638,20 @@ void main() {
     return { cbL: m.cbL, cbR: m.cbR, L, R };
   }
 
+  // The content width of the nearest ancestor that clips or scrolls, in css px, or null
+  // for none (the page itself scrolls). The window fallback must not be wider: K MANGA's
+  // viewer is its own 1250px scroller, and a 1265px page gave it a sideways scrollbar.
+  function scrollerWidth(img) {
+    if (CFG.fitWidth === 'window') return null;
+    for (let el = img.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+      const cs = getComputedStyle(el);
+      if (clips(el, cs)) {
+        return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      }
+    }
+    return null;
+  }
+
   function targetSize(img, nw, nh, forcedMode) {
     const vp = viewportDevice();
     const m = forcedMode || mode;
@@ -649,8 +663,11 @@ void main() {
 
     // Width to fit, in device px. Never wider than the window: a wider band is a
     // horizontal scroller or a misreading.
+    // No column that is safe to measure (a box sized by its contents) means the window -
+    // but never wider than a scroller the image sits in.
     const lay = layoutOf(img, nw, nh);
-    const avail = lay ? Math.max(1, Math.min(vp.w, Math.floor((lay.R - lay.L) * vp.r))) : vp.w;
+    const room = lay ? lay.R - lay.L : scrollerWidth(img);
+    const avail = room ? Math.max(1, Math.min(vp.w, Math.floor(room * vp.r))) : vp.w;
 
     if (m === 'integer') {
       let k = Math.floor(avail / nw);
@@ -707,11 +724,8 @@ void main() {
   // srcset or <picture>: the browser chooses the file itself and ignores src.
   const responsive = (raw) => raw.srcset !== null || raw.sources.length > 0;
 
-  function record(img) {
-    let s = state.get(img);
-
-    if (!s) {
-      s = {
+  function newState(img) {
+    return {
         id: ++idCounter, el: new WeakRef(img),
         // What the page asked for (see pageKey), what the element looks like while one
         // of our bitmaps is showing, and the page's own attributes for putting back.
@@ -731,7 +745,15 @@ void main() {
         // The <img>'s own inline styles: the page's values from before ours, and what we
         // last wrote. See setOwn().
         saved: null, wrote: null,
-      };
+    };
+  }
+
+  function record(img) {
+    if (isCanvas(img)) return recordCanvas(img);
+    let s = state.get(img);
+
+    if (!s) {
+      s = newState(img);
       state.set(img, s);
       adopt(img, s, pageKey(img));
       return s;
@@ -757,6 +779,25 @@ void main() {
       }
     }
     if (!s.origUrl) settle(img, s);
+    return s;
+  }
+
+  // A canvas page has no file to track: its size is its bitmap's, and a new size means a
+  // new page (or the same one redrawn) to lay out again. Never read, so never a source.
+  function recordCanvas(c) {
+    let s = state.get(c);
+    if (!s) {
+      s = newState(c);
+      Object.assign(s, { canvas: true, origUrl: 'canvas', pixelsKnown: true, gif: false });
+      state.set(c, s);
+    }
+    if (c.width !== s.nw || c.height !== s.nh) {
+      s.nw = c.width;
+      s.nh = c.height;
+      s.gen++;
+      s.key = null;
+      s.status = 'pending';
+    }
     return s;
   }
 
@@ -1087,6 +1128,22 @@ void main() {
     { host: /(^|\.)(e-hentai|exhentai)\.org$/,    selectors: ['.mimg', '#i1'] },
     { host: /(^|\.)webtoons\.com$/,               selectors: ['.viewer_lst'] },
   ];
+  // Readers that draw each page onto a <canvas> (K MANGA: 960x1367 bitmaps, shown at a
+  // size the site sets). Their pages are sized like images, and 'nearest' works through
+  // CSS, but they are never resampled: that would mean reading the canvas back, which the
+  // browser forbids for images drawn without CORS, and which would also get round the
+  // site's own copy protection. Per site, because resizing just any canvas (a game, a
+  // map, a chart) would break its page.
+  const CANVAS_RULES = [
+    { host: /(^|\.)kmanga\.kodansha\.com$/, selector: '.c-viewer__comic canvas' },
+  ];
+  const CANVAS_SEL =
+    (CANVAS_RULES.find((r) => r.host.test(location.hostname)) || {}).selector || null;
+  const isCanvas = (el) => el instanceof HTMLCanvasElement;
+  // Everything the script works on: the images, plus a canvas reader's pages.
+  const targets = () =>
+    (CANVAS_SEL ? [...document.images, ...document.querySelectorAll(CANVAS_SEL)] : document.images);
+
   // Settable from the console via __crispImages.containers, to find a working selector
   // for an unlisted site without editing the script.
   let CONTAINERS =
@@ -1431,7 +1488,8 @@ void main() {
       const kind = originKind(s.origUrl);
       const limited = s.limit && (s.limit.key === '*' || s.limit.key === key) ? s.limit.why : null;
       const blocked =
-        kind === 'file'
+        s.canvas ? 'the site draws this page on a canvas, which the script sizes but never reads'
+          : kind === 'file'
           ? 'file:// is an opaque origin - the GPU path cannot run on local files'
           : kind === 'other' ? 'unsupported URL scheme'
           : kind === 'cross' && noCors.has(hostOf(s.origUrl))
@@ -1728,7 +1786,7 @@ void main() {
   // changed, so this is cheap. Not gated on img.complete: right after a swap it is often
   // false, and the recorded size is what counts.
   function processVisible() {
-    for (const img of document.images) {
+    for (const img of targets()) {
       const s = state.get(img);
       if (!s || !s.nw || !eligible(s)) continue;
       if (visible.has(img) || nearViewport(img)) enqueue(img);
@@ -1776,6 +1834,12 @@ void main() {
           io.observe(img);
         }
       }
+      if (CANVAS_SEL) {
+        for (const c of document.querySelectorAll(CANVAS_SEL)) {
+          record(c);
+          if (!watched.has(c)) { watched.add(c); io.observe(c); }
+        }
+      }
       processVisible();
     } finally {
       updateHud();
@@ -1785,7 +1849,7 @@ void main() {
 
   function invalidateAll() {
     if (!enabled) return;
-    for (const img of document.images) {
+    for (const img of targets()) {
       const s = state.get(img);
       if (s) s.key = null;
     }
@@ -1801,7 +1865,7 @@ void main() {
     enabled = on;
     writeFlag('enabled', on);
     if (on) {
-      for (const img of document.images) {
+      for (const img of targets()) {
         const s = state.get(img);
         if (s && s.status === 'off') s.status = 'pending';
       }
@@ -1815,7 +1879,7 @@ void main() {
       watched = new WeakSet();
       queue.length = 0;
       columns.clear();
-      for (const img of document.images) restore(img);
+      for (const img of targets()) restore(img);
     }
     updateHud();
   }
@@ -1825,7 +1889,8 @@ void main() {
   // updating does not; before this filter, a busy page meant a sweep every frame. Layout
   // changes without an image change are the ResizeObserver's job.
   const hasImage = (n) => n.nodeType === 1 &&
-    (n.tagName === 'IMG' || n.tagName === 'SOURCE' || n.getElementsByTagName('img').length > 0);
+    (n.tagName === 'IMG' || n.tagName === 'SOURCE' || n.getElementsByTagName('img').length > 0 ||
+     (!!CANVAS_SEL && (n.tagName === 'CANVAS' || n.getElementsByTagName('canvas').length > 0)));
 
   const observer = new MutationObserver((records) => {
     for (const r of records) {
@@ -1835,7 +1900,9 @@ void main() {
       for (const n of r.removedNodes) if (hasImage(n)) { schedule(); return; }
     }
   });
-  const OPTS = { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'srcset'] };
+  // A canvas reader redraws a page by resizing its bitmap, which sets width and height.
+  const OPTS = { childList: true, subtree: true, attributes: true,
+                 attributeFilter: CANVAS_SEL ? ['src', 'srcset', 'width', 'height'] : ['src', 'srcset'] };
   let attached = false;
   const attach = () => { if (!attached) { observer.observe(document.documentElement, OPTS); attached = true; } };
   const detach = () => { if (attached) { observer.disconnect(); attached = false; } };
@@ -1889,10 +1956,18 @@ void main() {
   // put click-to-turn overlays over their pages, so the topmost element is often not the
   // image, and a click shortcut would reach only the overlay.
   function imageAt(e, eligibleOnly) {
-    const ok = (el) => el instanceof HTMLImageElement && state.has(el) &&
+    const ok = (el) => (el instanceof HTMLImageElement || isCanvas(el)) && state.has(el) &&
                        (!eligibleOnly || eligible(state.get(el)));
     if (ok(e.target)) return e.target;
-    return document.elementsFromPoint(e.clientX, e.clientY).find(ok) || null;
+    const hit = document.elementsFromPoint(e.clientX, e.clientY).find(ok);
+    if (hit || !CANVAS_SEL) return hit || null;
+    // K MANGA's canvases take no pointer events, so hit testing never returns them.
+    for (const c of document.querySelectorAll(CANVAS_SEL)) {
+      const r = c.getBoundingClientRect();
+      if (ok(c) && e.clientX >= r.left && e.clientX < r.right &&
+          e.clientY >= r.top && e.clientY < r.bottom) return c;
+    }
+    return null;
   }
 
   /* ------------------------------------------------------------------ *
@@ -2144,14 +2219,14 @@ void main() {
       columnsAt = 0;
       return s ? layoutOf(img || document.images[0], s.nw, s.nh) : null;
     },
-    report: () => [...document.images].map((img) => {
+    report: () => [...targets()].map((img) => {
       const s = state.get(img);
       return s ? {
         id: s.id, src: (s.origUrl || img.src).slice(0, 60), natural: `${s.nw}x${s.nh}`,
         origin: originKind(s.origUrl || img.src),
         output: s.report ? `${s.report.w}x${s.report.h} @${s.report.factor.toFixed(3)}` : '-',
         status: statusOf(s),
-      } : { src: (img.currentSrc || img.src).slice(0, 60), status: 'not tracked' };
+      } : { src: (img.currentSrc || img.src || '').slice(0, 60), status: 'not tracked' };
     }),
     get mode() { return mode; },
     set mode(v) { mode = v; invalidateAll(); },
@@ -2194,7 +2269,7 @@ void main() {
     // Coming back to a tab is when a timed-out image is most likely to succeed. It
     // takes the user to get here, so this cannot loop.
     if (document.visibilityState === 'visible') {
-      for (const img of document.images) {
+      for (const img of targets()) {
         const st = state.get(img);
         if (st && st.retryable) { st.retryable = false; st.key = null; }
       }
