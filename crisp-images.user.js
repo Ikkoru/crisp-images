@@ -47,19 +47,22 @@
     // Switching a site on or off is remembered and wins over this (see rememberPerSite).
     enabledOnStart: false,
 
-    // Remember, per site, what the keys switch: on/off (Alt+P), the overlay (Alt+H) and
-    // the side bars (Alt+[ / Alt+]).
-    // true:  each site keeps your last choice.
-    // false: every page starts from the settings here; key presses last until the page
-    //        is left or reloaded.
-    rememberPerSite: true,
-
-    // Show the overlay when a page opens? Alt+H toggles it, remembered per site.
+    // Show the overlay when a page opens? Alt+H toggles it (see rememberPerSite).
     hudOnStart: true,
 
     // Show the overlay's diagnostic rows when a page opens? Alt+G toggles them until
     // the page reloads. Not remembered per site, so set it here.
     detailsOnStart: false,
+
+    // Remember, per site, what the keys switch.
+    // true:  each site keeps your last choice.
+    // false: every page starts from the settings here; the key's change lasts until the
+    //        page is left or reloaded.
+    rememberPerSite: {
+      enabled: true,   // on or off (Alt+P)
+      hud: true,       // the overlay shown or hidden (Alt+H)
+      bars: true,      // the side bars' width (Alt+[ / Alt+])
+    },
 
     // Leave an image alone unless it is at least this wide AND this tall, in image
     // pixels. Keeps avatars, icons and banners out. 700 lets in Webtoons' 700px strips.
@@ -147,13 +150,18 @@
   };
 
   const HOST_KEY = (k) => `crispImages.${k}.${location.host}`;
-  // With rememberPerSite off, nothing is read or written: the config decides every time.
+  // What rememberPerSite leaves off is neither read nor written: the config decides
+  // every time. (A plain true or false there counts for all three.)
+  const remembers = (k) => {
+    const r = CFG.rememberPerSite;
+    return typeof r === 'object' && r !== null ? r[k] !== false : r !== false;
+  };
   const stored = (k) => {
-    if (!CFG.rememberPerSite) return null;
+    if (!remembers(k)) return null;
     try { return localStorage.getItem(HOST_KEY(k)); } catch { return null; }
   };
   const store = (k, v) => {
-    if (!CFG.rememberPerSite) return;
+    if (!remembers(k)) return;
     try { localStorage.setItem(HOST_KEY(k), v); } catch { /* private mode */ }
   };
   const readFlag = (k, d) => { const v = stored(k); return v === null ? d : v === '1'; };
@@ -1232,6 +1240,20 @@ void main() {
                     ['width', `${viewportWidth() - from}px`]]);
   }
 
+  // Page-wide fixes, while the script is on for the site. Webtoons gives its page a
+  // min-width of 1400px, wider than most windows: the page then scrolls sideways, and
+  // the strips, filled to the window, jumped back into place after every sideways
+  // scroll. Without it the site's 1200px column centres in the window.
+  const PAGE_RULES = [
+    { host: /(^|\.)webtoons\.com$/, selector: '#wrap', props: [['min-width', '0px']] },
+  ];
+  const PAGE_RULE = PAGE_RULES.find((r) => r.host.test(location.hostname)) || null;
+
+  function pageRule(on) {
+    const el = PAGE_RULE && document.querySelector(PAGE_RULE.selector);
+    if (el) override(el, on ? PAGE_RULE.props : null);
+  }
+
   // K MANGA shows its pages in a viewer box whose height it sets to fit one page, and
   // gives each page a slot with that height as its min-height. The box becomes
   // viewerHeight of the window, pushing the rest of the page down, and the slots lose
@@ -1984,6 +2006,7 @@ void main() {
       for (const img of visible) if (!img.isConnected) visible.delete(img);
       pruneBoxes();
       columnsAt = 0;
+      pageRule(true);
       guardScrollbar();
 
       for (const img of document.images) {
@@ -2083,6 +2106,7 @@ void main() {
     } else {
       detach();
       if (gutterSize) { override(document.documentElement, null); gutterSize = 0; }
+      pageRule(false);
       widthsSeen = [];
       io.disconnect();
       boxRO?.disconnect();

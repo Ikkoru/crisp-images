@@ -19,7 +19,7 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 3. Open a page with a big image and press **`Alt+P`** to switch it on for that site.
 4. Press `Alt+H` to see what it is doing.
 
-**The script starts switched off**, so it never changes a page you did not ask it to. `Alt+P` is remembered per site: switch a site on once and it stays on; switch it off and it stays off. To have it on everywhere, set `enabledOnStart: true` in the script. To have nothing remembered, set `rememberPerSite: false`.
+**The script starts switched off**, so it never changes a page you did not ask it to. `Alt+P` is remembered per site: switch a site on once and it stays on; switch it off and it stays off. To have it on everywhere, set `enabledOnStart: true` in the script. `rememberPerSite` says what is remembered: on/off, the overlay and the side bars can each be turned off there.
 
 ## Controls
 
@@ -66,7 +66,7 @@ Edit the `CFG` block at the top of the script.
 | -------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
 | `enabledOnStart`                       | `false`     | Start switched on for every site. Off means nothing happens until you press `Alt+P`                       |
 | `hudOnStart`                           | `true`      | Show the overlay when a page opens. `Alt+H` changes it, remembered per site                               |
-| `rememberPerSite`                      | `true`      | Remember `Alt+P`, `Alt+H` and the side bars per site. `false`: every page starts from these settings       |
+| `rememberPerSite`                      | all `true`  | Per feature: `enabled` (`Alt+P`), `hud` (`Alt+H`), `bars` (`Alt+[` / `Alt+]`). `false` for one: every page starts from the setting here |
 | `detailsOnStart`                       | `false`     | Show the overlay's diagnostic rows when a page opens. `Alt+G` toggles them until the page reloads         |
 | `minNaturalWidth` / `minNaturalHeight` | 700 / 1066  | Leave smaller images alone: avatars, icons, banners. 700 is just wide enough for Webtoons' strips |
 | `mode`                                 | `fit-width` | Size to start with                                                                                        |
