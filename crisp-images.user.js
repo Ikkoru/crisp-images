@@ -44,8 +44,15 @@
     // Start switched on for every site?
     // false: off everywhere until you switch it on for a site (Alt+P).
     // true:  on everywhere. Not recommended.
-    // Either way, switching a site on or off is remembered and wins over this.
+    // Switching a site on or off is remembered and wins over this (see rememberPerSite).
     enabledOnStart: false,
+
+    // Remember, per site, what the keys switch: on/off (Alt+P), the overlay (Alt+H) and
+    // the side bars (Alt+[ / Alt+]).
+    // true:  each site keeps your last choice.
+    // false: every page starts from the settings here; key presses last until the page
+    //        is left or reloaded.
+    rememberPerSite: true,
 
     // Show the overlay when a page opens? Alt+H toggles it, remembered per site.
     hudOnStart: true,
@@ -95,10 +102,10 @@
     // what you set is remembered per site. 0: no bars.
     sideBars: 0,
 
-    // Readers whose pages sit in a fixed-height viewer box (K MANGA): that box's height,
-    // as a share of the window's height. 0.9 leaves a tenth of the window for the rest
-    // of the page; everything below the viewer moves down. 0: the site's own height.
-    viewerHeight: 0.9,
+    // For readers whose pages sit in a fixed-height viewer box (K MANGA). Changes that
+    // box's height, as a share of the window's height. 0.95 leaves 5% of the window for
+    // the rest of the page; everything below the viewer moves down. 0 turns this off.
+    viewerHeight: 0.95,
 
     // Largest image to resample, in pixels (64 megapixels). Bigger ones are left to
     // the browser.
@@ -140,21 +147,19 @@
   };
 
   const HOST_KEY = (k) => `crispImages.${k}.${location.host}`;
-  const readFlag = (k, d) => {
-    try { const v = localStorage.getItem(HOST_KEY(k)); return v === null ? d : v === '1'; }
-    catch { return d; }
+  // With rememberPerSite off, nothing is read or written: the config decides every time.
+  const stored = (k) => {
+    if (!CFG.rememberPerSite) return null;
+    try { return localStorage.getItem(HOST_KEY(k)); } catch { return null; }
   };
-  const writeFlag = (k, v) => {
-    try { localStorage.setItem(HOST_KEY(k), v ? '1' : '0'); } catch { /* private mode */ }
+  const store = (k, v) => {
+    if (!CFG.rememberPerSite) return;
+    try { localStorage.setItem(HOST_KEY(k), v); } catch { /* private mode */ }
   };
-
-  const readNumber = (k, d) => {
-    try { const v = parseFloat(localStorage.getItem(HOST_KEY(k))); return Number.isFinite(v) ? v : d; }
-    catch { return d; }
-  };
-  const writeNumber = (k, v) => {
-    try { localStorage.setItem(HOST_KEY(k), String(v)); } catch { /* private mode */ }
-  };
+  const readFlag = (k, d) => { const v = stored(k); return v === null ? d : v === '1'; };
+  const writeFlag = (k, v) => store(k, v ? '1' : '0');
+  const readNumber = (k, d) => { const v = parseFloat(stored(k)); return Number.isFinite(v) ? v : d; };
+  const writeNumber = (k, v) => store(k, String(v));
 
   let enabled = readFlag('enabled', CFG.enabledOnStart);
   let bars = readNumber('bars', CFG.sideBars);   // percent of the window's width, each side
@@ -198,8 +203,11 @@ void main() {
 
     const FRAG = `#version 300 es
 precision highp float;
-// Samplers default to lowp in fragment shaders. Desktop GPUs ignore that; mobile ones
-// may not, and the half-float intermediate holds values lowp cannot.
+// Ints default to mediump in fragment shaders, and float(j) + 0.5 below inherits it.
+// Some mobile GPUs work mediump out in 16-bit floats, which cannot hold x.5 past 1024:
+// every tap position and weight went half a pixel off from there on (GitHub issue #1,
+// found by its reporter). Desktop GPUs ignore these precisions.
+precision highp int;
 precision highp sampler2D;
 uniform sampler2D u_tex;
 uniform vec2  u_srcSize;
@@ -319,7 +327,10 @@ void main() {
 
         fboTex = gl.createTexture();
         fbo = gl.createFramebuffer();
-        if (halfFloat && !halfFloatWorks()) { halfFloat = false; hfFailed = true; }
+        if (halfFloat && !pathWorks(true)) { halfFloat = false; hfFailed = true; }
+        if (!halfFloat && !pathWorks(false)) {
+          throw new Error('failed its self-test: a resample did not match the reference');
+        }
         return true;
       } catch (e) {
         broken = true;
@@ -350,24 +361,31 @@ void main() {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    // A GPU can advertise a half-float render target and still get it wrong: on a Pixel 10
-    // Pro Fold (PowerVR D-Series, Android Edge) the result came out corrupted (GitHub
-    // issue #1). So before the 16-bit path is used, it resamples a small pattern with hard
-    // edges, and the result must match the same filter worked out here in 64-bit floats.
-    // If it does not, the 8-bit intermediate is used: it clips Lanczos's overshoot at
-    // hard edges, but draws correctly.
-    function halfFloatWorks() {
-      const sw = 12, sh = 8, dw = 29, dh = 19;
-      const src = new Uint8Array(sw * sh * 4);
-      for (let y = 0; y < sh; y++) {
-        for (let x = 0; x < sw; x++) {
-          const i = (y * sw + x) * 4;
-          src[i] = (x + y) % 2 ? 255 : 0;              // 1px checkerboard: overshoot everywhere
-          src[i + 1] = x % 3 ? 255 : 0;                // 1px lines
-          src[i + 2] = Math.round(255 * x / (sw - 1)); // a ramp
-          src[i + 3] = 255;
+    // Before the GPU path is trusted, it resamples two test strips and the result must
+    // match the same filter worked out here in 64-bit floats. The strips are 2200px long,
+    // wide and tall, because GPUs have failed only past a size: on a Pixel 10 Pro Fold and
+    // a Galaxy Tab S9 Ultra every tap drifted half a pixel beyond 1024px (GitHub issue #1,
+    // now fixed by highp int above); a 12px pattern passed there. If the 16-bit
+    // intermediate fails, the 8-bit one is tried; if that fails too, the GPU is not used.
+    function pathWorks(half) {
+      const patterns = [[2200, 6, 2420, 7], [6, 2200, 7, 2420]];
+      for (const [sw, sh, dw, dh] of patterns) {
+        const src = new Uint8Array(sw * sh * 4), n = Math.max(sw, sh);
+        for (let y = 0; y < sh; y++) {
+          for (let x = 0; x < sw; x++) {
+            const i = (y * sw + x) * 4, t = sw > sh ? x : y;
+            src[i] = (x + y) % 2 ? 255 : 0;                // 1px checkerboard: hard edges
+            src[i + 1] = t % 3 ? 255 : 0;                  // 1px lines
+            src[i + 2] = Math.round(255 * t / (n - 1));    // a ramp along the strip
+            src[i + 3] = 255;
+          }
         }
+        if (!stripMatches(src, sw, sh, dw, dh, half)) return false;
       }
+      return true;
+    }
+
+    function stripMatches(src, sw, sh, dw, dh, half) {
       let tex = null;
       try {
         cv.width = dw;
@@ -380,7 +398,8 @@ void main() {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sw, sh, 0, gl.RGBA, gl.UNSIGNED_BYTE, src);
         gl.bindTexture(gl.TEXTURE_2D, fboTex);
         clampTex();
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, dw, sh, 0, gl.RGBA, gl.HALF_FLOAT, null);
+        if (half) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, dw, sh, 0, gl.RGBA, gl.HALF_FLOAT, null);
+        else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, dw, sh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) return false;
@@ -392,8 +411,8 @@ void main() {
         const got = new Uint8Array(dw * dh * 4);
         gl.readPixels(0, 0, dw, dh, gl.RGBA, gl.UNSIGNED_BYTE, got);
         if (gl.getError() !== gl.NO_ERROR) return false;
-        const want = lanczosCPU(src, sw, sh, dw, dh);
-        // A correct GPU is within 1-2 levels (shader-selftest.html); corruption is not.
+        const want = lanczosCPU(src, sw, sh, dw, dh, !half);
+        // A correct GPU is within 1-2 levels (shader-selftest.html); a drifting one is not.
         for (let i = 0; i < got.length; i++) if (Math.abs(got[i] - want[i]) > 3) return false;
         return true;
       } catch {
@@ -404,9 +423,10 @@ void main() {
       }
     }
 
-    // The shader's filter, on the CPU: horizontal pass kept in full precision, then
-    // vertical, rounded to 8 bits at the end as the canvas does.
-    function lanczosCPU(src, sw, sh, dw, dh) {
+    // The shader's filter, on the CPU: horizontal pass, then vertical, rounded to 8 bits
+    // at the end as the canvas does. eightBit: the in-between result is clamped and
+    // rounded to 8 bits too, as the 8-bit intermediate stores it.
+    function lanczosCPU(src, sw, sh, dw, dh, eightBit) {
       const kernel = (x) => {
         x = Math.abs(x);
         if (x >= 3) return 0;
@@ -437,7 +457,7 @@ void main() {
           for (let c = 0; c < 4; c++) {
             let v = 0;
             for (const [j, w] of hx[x]) v += w * src[(y * sw + j) * 4 + c];
-            mid[(y * dw + x) * 4 + c] = v;
+            mid[(y * dw + x) * 4 + c] = eightBit ? Math.max(0, Math.min(255, Math.round(v))) : v;
           }
         }
       }
@@ -520,9 +540,18 @@ void main() {
    * a fair side-by-side comparison.
    * ================================================================== */
 
+  // The window's usable width in css px. Once the scrollbar's space is reserved (see
+  // guardScrollbar), the page lays out without it whether or not a scrollbar shows - but
+  // clientWidth and visualViewport still report the full width for a moment while the
+  // scrollbar goes away, and taking them at their word restarted the flipping.
+  function viewportWidth() {
+    const cw = document.documentElement.clientWidth;
+    return gutterSize ? Math.min(cw, innerWidth - gutterSize) : cw;
+  }
+
   function viewportDevice() {
     const r = dpr();
-    const w = window.visualViewport?.width ?? window.innerWidth;
+    const w = Math.min(window.visualViewport?.width ?? window.innerWidth, viewportWidth());
     const h = window.visualViewport?.height ?? window.innerHeight;
     return { w: Math.floor(w * r), h: Math.floor(h * r), r };
   }
@@ -581,7 +610,7 @@ void main() {
     if (!(cbR - cbL > 0)) return null;
 
     const c = (cbL + cbR) / 2;
-    const vpW = document.documentElement.clientWidth;
+    const vpW = viewportWidth();
     let clipL = 0, clipR = vpW;
     const boxes = [];
     const consider = (k) => {
@@ -1158,12 +1187,14 @@ void main() {
   // browser forbids for images drawn without CORS, and which would also get round the
   // site's own copy protection. Per site, because resizing just any canvas (a game, a
   // map, a chart) would break its page.
+  // K MANGA: only its scrolling view. Its paged view fits pages to the viewer itself.
   const CANVAS_RULES = [
-    { host: /(^|\.)kmanga\.kodansha\.com$/, selector: '.c-viewer__comic canvas' },
+    { host: /(^|\.)kmanga\.kodansha\.com$/, selector: '.c-viewer.is-vertical .c-viewer__comic canvas' },
   ];
   const CANVAS_SEL =
     (CANVAS_RULES.find((r) => r.host.test(location.hostname)) || {}).selector || null;
   const isCanvas = (el) => el instanceof HTMLCanvasElement;
+  const canvasesTracked = new Set();
   // Everything the script works on: the images, plus a canvas reader's pages.
   const targets = () =>
     (CANVAS_SEL ? [...document.images, ...document.querySelectorAll(CANVAS_SEL)] : document.images);
@@ -1180,43 +1211,82 @@ void main() {
   const RELAX_PROPS = Object.keys(RELAX);
   const relaxedEls = new WeakMap();   // element -> its inline values before we touched it
 
-  // e-hentai's multi-page viewer: its image pane (#pane_images) clips, starts 2px in (the
-  // body's padding) and is set 5px narrower than the window, so a full-width image kept
-  // 2-3px gaps. While the thumbnail pane is closed, the pane is stretched over the whole
-  // window. With thumbnails open, or when switched off, the site's values go back,
-  // unless the site has written newer ones, which stay.
+  // e-hentai's multi-page viewer: its image pane (#pane_images) clips, and the site
+  // leaves small gaps around it - 2px at the left (the body's padding) and 3px at the
+  // right with the thumbnail pane closed; 5px after the thumbnails and 3px at the right
+  // with it open. The pane is stretched from the thumbnails' right edge (or the window's
+  // left) to the window's right. Switched off, the site's values go back, unless the
+  // site has written newer ones, which stay.
   const MPV = /(^|\.)(e-hentai|exhentai)\.org$/.test(location.hostname) &&
               /^\/mpv\//.test(location.pathname);
-  const PANE = [['left', '-2px'], ['width', '100%']];
 
   function mpvPane(img, on) {
     const pane = MPV && img.closest('#pane_images');
     if (!pane) return;
+    if (!on) { override(pane, null); return; }
     const thumbs = document.getElementById('pane_thumbs');
     const open = thumbs && getComputedStyle(thumbs).display !== 'none';
-    override(pane, on && !open ? PANE : null);
+    const from = open ? thumbs.getBoundingClientRect().right : 0;
+    const origin = (pane.offsetParent || document.documentElement).getBoundingClientRect().left;
+    override(pane, [['left', `${from - origin}px`],
+                    ['width', `${viewportWidth() - from}px`]]);
   }
 
-  // K MANGA shows its pages in a viewer box whose height it sets to fit one page. That
-  // box becomes viewerHeight of the window, pushing the rest of the page down.
-  const VIEWER_RULES = [
-    { host: /(^|\.)kmanga\.kodansha\.com$/, selector: '.c-viewer__content' },
-  ];
-  const VIEWER_SEL =
-    (VIEWER_RULES.find((r) => r.host.test(location.hostname)) || {}).selector || null;
+  // K MANGA shows its pages in a viewer box whose height it sets to fit one page, and
+  // gives each page a slot with that height as its min-height. The box becomes
+  // viewerHeight of the window, pushing the rest of the page down, and the slots lose
+  // their min-height, which otherwise left a gap under every page shorter than the box.
+  // Only in the scrolling view; and the box is left alone in the site's own full-window
+  // views (Full screen, Zoom), where it sizes the box itself.
+  const VIEWER_RULES = [{
+    host: /(^|\.)kmanga\.kodansha\.com$/,
+    box: '.c-viewer__content', item: '.c-viewer__pages-item',
+    when: '.c-viewer.is-vertical', unless: '.is-fullscreen, .is-expand',
+  }];
+  const VIEWER = VIEWER_RULES.find((r) => r.host.test(location.hostname)) || null;
 
   function viewerBox(img, on) {
-    const box = VIEWER_SEL && img.closest(VIEWER_SEL);
+    const box = VIEWER && img.closest(VIEWER.box);
     if (!box) return;
+    watchViewer(box);
+    const scrolling = on && !!box.closest(VIEWER.when);
+    const full = !!box.closest(VIEWER.unless) || !!document.fullscreenElement;
     const h = Math.round(CFG.viewerHeight * innerHeight);
-    // Its stylesheet also caps it (max-height: 800px).
-    override(box, on && h > 0 ? [['height', h + 'px'], ['max-height', 'none']] : null);
+    // Its stylesheet also caps the box (max-height: 800px).
+    override(box, scrolling && !full && h > 0 ? [['height', h + 'px'], ['max-height', 'none']] : null);
+    const item = img.closest(VIEWER.item);
+    if (item) override(item, scrolling ? [['min-height', '0px']] : null);
+  }
+
+  // The site switches views by changing classes above the box. No image changes, so
+  // nothing else would notice; only a change in the classes that matter counts.
+  const viewersWatched = new WeakSet();
+  function watchViewer(box) {
+    if (viewersWatched.has(box)) return;
+    viewersWatched.add(box);
+    const view = () => `${!!box.closest(VIEWER.when)}|${!!box.closest(VIEWER.unless)}`;
+    let last = view();
+    const mo = new MutationObserver(() => {
+      const now = view();
+      if (now === last) return;
+      last = now;
+      if (enabled) invalidateAll();
+    });
+    for (let el = box; el; el = el.parentElement) {
+      mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+    }
   }
 
   // Inline styles set on an element of the page's (not the image), remembering the
   // page's own values. Given back with null - unless the page has written newer ones
   // since, which stay.
+  //
+  // While set, they are pinned: a page that writes its own value back (K MANGA resets
+  // every page slot's min-height when its viewer resizes) gets ours again at once, before
+  // anything is drawn. A page that keeps fighting back (over 20 writes a second) is left
+  // to it until the next pass, rather than fought forever.
   const overrides = new WeakMap();   // element -> { prop: [page value, priority, ours] }
+  const pins = new WeakMap();        // element -> its MutationObserver
 
   function override(el, props) {
     let saved = overrides.get(el);
@@ -1229,7 +1299,10 @@ void main() {
         const ours = el.style.getPropertyValue(p);
         if (ours !== saved[p][2]) { saved[p][2] = ours; columnsAt = 0; }
       }
+      pin(el);
     } else if (saved) {
+      pins.get(el)?.disconnect();
+      pins.delete(el);
       for (const p in saved) {
         const [v, pri, ours] = saved[p];
         if (el.style.getPropertyValue(p) !== ours) continue;
@@ -1239,6 +1312,26 @@ void main() {
       overrides.delete(el);
       columnsAt = 0;
     }
+  }
+
+  function pin(el) {
+    if (pins.has(el)) return;
+    let writes = 0, since = performance.now();
+    const mo = new MutationObserver(() => {
+      const saved = overrides.get(el);
+      if (!saved) return;
+      const now = performance.now();
+      if (now - since > 1000) { since = now; writes = 0; }
+      for (const p in saved) {
+        const cur = el.style.getPropertyValue(p), ours = saved[p][2];
+        if (cur === ours || ++writes > 20) continue;
+        saved[p][0] = cur;
+        saved[p][1] = el.style.getPropertyPriority(p);
+        el.style.setProperty(p, ours, 'important');
+      }
+    });
+    mo.observe(el, { attributes: true, attributeFilter: ['style'] });
+    pins.set(el, mo);
   }
 
   function relaxContainers(img) {
@@ -1477,6 +1570,9 @@ void main() {
 
   async function processImage(img) {
     if (!enabled) return;
+    // A canvas that no longer matches its rule (K MANGA's paged view) is handed back, and
+    // must not be picked up again from an old IntersectionObserver entry.
+    if (isCanvas(img) && !(CANVAS_SEL && img.matches(CANVAS_SEL))) return;
     const s = record(img);
     if (!s.origUrl || !s.nw || !eligible(s)) return;
     // Busy: note the request and run again when this pass finishes. Dropping it would make
@@ -1888,6 +1984,7 @@ void main() {
       for (const img of visible) if (!img.isConnected) visible.delete(img);
       pruneBoxes();
       columnsAt = 0;
+      guardScrollbar();
 
       for (const img of document.images) {
         if (img.complete && img.naturalWidth) record(img);
@@ -1898,8 +1995,20 @@ void main() {
         }
       }
       if (CANVAS_SEL) {
+        // A canvas that stops matching (K MANGA switched to its paged view) is handed back.
+        for (const c of canvasesTracked) {
+          if (!c.isConnected) canvasesTracked.delete(c);
+          else if (!c.matches(CANVAS_SEL)) {
+            canvasesTracked.delete(c);
+            io.unobserve(c);
+            watched.delete(c);
+            visible.delete(c);
+            restore(c);
+          }
+        }
         for (const c of document.querySelectorAll(CANVAS_SEL)) {
           record(c);
+          canvasesTracked.add(c);
           if (!watched.has(c)) { watched.add(c); io.observe(c); }
         }
       }
@@ -1921,6 +2030,44 @@ void main() {
     sweep();
   }
 
+  // The side bars change a step at a time, and a held key repeats. Each step resizes the
+  // images in view at once (the browser scales the bitmap already there for a moment);
+  // the resample waits until the steps stop, or a held key would start one per repeat.
+  let barsTimer = 0;
+  function barsChanged() {
+    for (const img of targets()) {
+      const s = state.get(img);
+      if (!s || s.busy || !s.report || !eligible(s) || !visible.has(img)) continue;
+      applySize(img, targetSize(img, s.nw, s.nh, s.forcedMode), s);
+    }
+    clearTimeout(barsTimer);
+    barsTimer = setTimeout(invalidateAll, 300);
+  }
+
+  // A page whose height sits right at the window's can flip its scrollbar forever: the
+  // scrollbar goes, the image widens into its 15px, the page overflows, the scrollbar
+  // comes back, the image narrows, the page fits, and so on. That shows as the page's
+  // width flipping between two values a scrollbar apart. The cure is to keep the
+  // scrollbar's space reserved (scrollbar-gutter: stable), so the width no longer
+  // depends on it. Given back when switched off.
+  let widthsSeen = [];   // [time, width] at each change
+  let gutterSize = 0;    // the scrollbar's width, once its space is reserved
+  function guardScrollbar() {
+    if (gutterSize) return;
+    const w = document.documentElement.clientWidth, now = performance.now();
+    const last = widthsSeen[widthsSeen.length - 1];
+    if (last && last[1] === w) return;
+    widthsSeen = [...widthsSeen.filter(([t]) => now - t < 3000), [now, w]];
+    const ws = [...new Set(widthsSeen.map(([, x]) => x))];
+    const size = Math.abs(ws[0] - ws[1]);
+    if (widthsSeen.length >= 4 && ws.length === 2 && size > 0 && size <= 25) {
+      override(document.documentElement, [['scrollbar-gutter', 'stable']]);
+      gutterSize = size;
+      columnsAt = 0;
+      traceMark(`scrollbar flipping: ${size}px reserved`);
+    }
+  }
+
   // The on/off switch. Off hands every image back (a busy one when it finishes) and stops
   // watching the page entirely, so an off script costs nothing. (Watching while off costs
   // about 35 sweeps a second on a page that changes every frame.)
@@ -1935,6 +2082,8 @@ void main() {
       invalidateAll();
     } else {
       detach();
+      if (gutterSize) { override(document.documentElement, null); gutterSize = 0; }
+      widthsSeen = [];
       io.disconnect();
       boxRO?.disconnect();
       observedBoxes.clear();
@@ -1943,6 +2092,8 @@ void main() {
       queue.length = 0;
       columns.clear();
       for (const img of targets()) restore(img);
+      for (const c of canvasesTracked) restore(c);
+      canvasesTracked.clear();
     }
     updateHud();
   }
@@ -2151,7 +2302,10 @@ void main() {
   }
 
   addEventListener('keydown', (e) => {
-    if (e.repeat || typing(e)) return;
+    if (typing(e)) return;
+    // Held keys repeat only for the side bars; a repeating toggle would flicker.
+    const barKey = pressed(KEYS.barsLess, e) || pressed(KEYS.barsMore, e);
+    if (e.repeat && !barKey) return;
     if (pressed(KEYS.toggle, e)) {
       // Only switching ON restarts the trace clock; on OFF, work still finishing would
       // report nonsense times.
@@ -2163,12 +2317,14 @@ void main() {
     else if (pressed(KEYS.details, e)) { detailsVisible = !detailsVisible; focus = null; updateHud(); }
     else if (pressed(KEYS.mode, e)) { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; invalidateAll(); updateHud(); }
     else if (pressed(KEYS.quality, e)) { quality = QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]; invalidateAll(); updateHud(); }
-    else if (enabled && (pressed(KEYS.barsLess, e) || pressed(KEYS.barsMore, e))) {
-      const step = pressed(KEYS.barsMore, e) ? 0.5 : -0.5;
-      bars = Math.max(0, Math.min(25, Math.round((bars + step) * 2) / 2));
-      writeNumber('bars', bars);
-      invalidateAll();
-      updateHud();
+    else if (barKey) {
+      if (enabled) {
+        const step = pressed(KEYS.barsMore, e) ? 0.5 : -0.5;
+        bars = Math.max(0, Math.min(25, Math.round((bars + step) * 2) / 2));
+        writeNumber('bars', bars);
+        barsChanged();
+        updateHud();
+      }
     }
     else return;
     e.preventDefault();
@@ -2208,9 +2364,9 @@ void main() {
     if (!hud) {
       hud = document.createElement('div');
       hud.style.cssText = [
-        'position:fixed', 'z-index:2147483647', 'right:8px', 'bottom:8px',
+        'position:fixed', 'z-index:2147483647', 'right:0', 'bottom:0',
         'background:rgba(0,0,0,.85)', 'color:#0f0', 'font:12px/1.45 Consolas,monospace',
-        'padding:8px 10px', 'border-radius:6px', 'pointer-events:none',
+        'padding:8px 10px 4px', 'border-radius:6px 0 0 0', 'pointer-events:none',
         'white-space:pre', 'text-align:left', 'max-width:60vw',
       ].join(';');
     }
@@ -2223,11 +2379,11 @@ void main() {
     // Always shown: what the script is doing, and the shortcuts as configured, each named
     // by what it will do.
     const keyHelp = [[KEYS.toggle, enabled ? 'off' : 'on'], [KEYS.mode, 'mode'],
-      [KEYS.quality, 'quality'], [KEYS.overlay, 'hud'], [KEYS.details, 'details'],
+      [KEYS.quality, 'quality'], [KEYS.overlay, 'hud'],
       [KEYS.barsLess, 'bars-'], [KEYS.barsMore, 'bars+']]
       .filter(([b]) => b).map(([b, what]) => `${b.text} ${what}`).join('  ');
-    const clickHelp = CLICKS.map(([what, b]) => `${b.text} = ${what === 'native' ? '1:1' : '2x native'}`)
-      .join('   ');
+    const clickHelp = [...CLICKS.map(([what, b]) => `${b.text} = ${what === 'native' ? '1:1' : '2x native'}`),
+      ...(KEYS.details ? [`${KEYS.details.text} details`] : [])].join('   ');
     const L = [`crisp-images ${enabled ? 'ON' : 'OFF'}   mode=${mode === 'fit-width' ? `fit-width ${CFG.fitWidth}` : mode}  quality=${quality}` +
                (bars > 0 ? `  bars=${bars}%` : '')];
     if (keyHelp) L.push(keyHelp);
@@ -2313,6 +2469,9 @@ void main() {
     set mode(v) { mode = v; invalidateAll(); },
     get quality() { return quality; },
     set quality(v) { quality = v; invalidateAll(); },
+    // Side bars, in % of the window's width on each side (as Alt+[ / Alt+] set them).
+    get bars() { return bars; },
+    set bars(v) { bars = Math.max(0, Math.min(25, +v || 0)); writeNumber('bars', bars); invalidateAll(); updateHud(); },
     get fitWidth() { return CFG.fitWidth; },
     set fitWidth(v) { CFG.fitWidth = v; columnsAt = 0; invalidateAll(); },
     get trace() { return trace; },
@@ -2334,7 +2493,10 @@ void main() {
     blobBytes = 0;
   });
 
-  addEventListener('resize', invalidateAll);
+  // You resizing the window is not a scrollbar flipping.
+  addEventListener('resize', () => { widthsSeen = []; invalidateAll(); });
+  // Full screen through the page (K MANGA's button) changes how its viewer is sized.
+  document.addEventListener('fullscreenchange', () => { if (enabled) invalidateAll(); });
   // A page wider than the window (Webtoons is 1400px) can be scrolled, or scrolled by
   // its own script, sideways. The free band is measured against the window, so a
   // sideways scroll moves it; vertical scrolling does not, and is left to the observers.

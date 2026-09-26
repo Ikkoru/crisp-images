@@ -19,7 +19,7 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 3. Open a page with a big image and press **`Alt+P`** to switch it on for that site.
 4. Press `Alt+H` to see what it is doing.
 
-**The script starts switched off**, so it never changes a page you did not ask it to. `Alt+P` is remembered per site: switch a site on once and it stays on; switch it off and it stays off. To have it on everywhere, set `enabledOnStart: true` in the script.
+**The script starts switched off**, so it never changes a page you did not ask it to. `Alt+P` is remembered per site: switch a site on once and it stays on; switch it off and it stays off. To have it on everywhere, set `enabledOnStart: true` in the script. To have nothing remembered, set `rememberPerSite: false`.
 
 ## Controls
 
@@ -30,7 +30,7 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 | `Alt+Q`                             | Filter: Lanczos3 → nearest → browser. Same size each time, so you can compare                   |
 | `Alt+H`                             | Show or hide the info overlay. Remembered per site                                              |
 | `Alt+G`                             | Show or hide the overlay's diagnostic rows (size, factor, status, memory)                       |
-| `Alt+[` / `Alt+]`                   | Narrower / wider black bars at the sides of each image, 0.5% of the window a step. Remembered per site |
+| `Alt+[` / `Alt+]`                   | Narrower / wider black bars at the sides of each image, 0.5% of the window a step; hold to keep going. Remembered per site |
 | `Alt` + left click<br/>on an image  | Show that one image at one image pixel per screen pixel                                         |
 | `Alt` + right click<br/>on an image | Show that one image at twice its own resolution                                                 |
 
@@ -66,6 +66,7 @@ Edit the `CFG` block at the top of the script.
 | -------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
 | `enabledOnStart`                       | `false`     | Start switched on for every site. Off means nothing happens until you press `Alt+P`                       |
 | `hudOnStart`                           | `true`      | Show the overlay when a page opens. `Alt+H` changes it, remembered per site                               |
+| `rememberPerSite`                      | `true`      | Remember `Alt+P`, `Alt+H` and the side bars per site. `false`: every page starts from these settings       |
 | `detailsOnStart`                       | `false`     | Show the overlay's diagnostic rows when a page opens. `Alt+G` toggles them until the page reloads         |
 | `minNaturalWidth` / `minNaturalHeight` | 700 / 1066  | Leave smaller images alone: avatars, icons, banners. 700 is just wide enough for Webtoons' strips |
 | `mode`                                 | `fit-width` | Size to start with                                                                                        |
@@ -73,7 +74,7 @@ Edit the `CFG` block at the top of the script.
 | `fitWidth`                             | `space`     | What "fit width" fills: all the free width (`space`), the site's column (`container`), or the window (`window`) |
 | `fitHeightToo`                         | `false`     | Fit the height as well, so a whole page fits on screen                                                    |
 | `sideBars`                             | 0           | Black bars at the left and right of each image, as a percentage of the window's width on each side. `Alt+[` / `Alt+]` change it |
-| `viewerHeight`                         | 0.9         | On readers whose pages sit in a fixed-height viewer box (K MANGA): its height as a share of the window. `0` keeps the site's |
+| `viewerHeight`                         | 0.95        | On readers whose pages sit in a fixed-height viewer box (K MANGA): its height as a share of the window. `0` turns this off |
 | `maxOutputPixels`                      | 64M         | Don't resample beyond this many output pixels                                                             |
 | `blobBudget`                           | 64 MB       | Memory for keeping resampled images ready ([see above](#a-note-on-memory))                                |
 | `lazyMargin`                           | 1.5         | How many screenfuls ahead to get images ready, so they are done before you scroll to them                 |
@@ -160,7 +161,8 @@ The two passes keep their in-between result in a half-float texture. An 8-bit on
 - The first time an image is drawn at a given size and filter costs a moment. Repeats come from memory.
 - Where the GPU can't be used, `nearest` falls back to CSS.
 - Pages drawn onto a `<canvas>` instead of shown as images are only handled on K MANGA, where they are sized but never resampled (see [supported sites](supported-sites.md)). Resizing just any canvas would break games, maps and charts.
-- Some phone GPUs claim to support the 16-bit working texture the filter uses between its two passes, then draw it wrong (GitHub issue #1). Since 4.1 the script checks that texture against a small reference resample before using it, and falls back to 8 bits if it fails. 8 bits is slightly less exact at hard edges, but correct. The overlay's status says which one is in use.
+- Some phone GPUs drew Lanczos3 wrong past about 1024 pixels (GitHub issue #1; its reporter found the fix, in 4.2). Since 4.2 the script also checks the GPU against a reference resample at a realistic size before using it: if the 16-bit working texture fails it uses 8 bits, and if that fails too it leaves images to the browser. The overlay's status says which.
+- A page whose height is right at the window's could make the scrollbar come and go without end, as each change resized the image. Since 4.2 the script notices and keeps the scrollbar's space reserved on that page.
 
 ## When a site won't let the script resample
 
