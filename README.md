@@ -93,14 +93,15 @@ It runs on every site, but with `@grant none` and no external libraries. **Nothi
 
 The only request it can make is re-reading an image the page has already loaded: the same URL, usually straight from cache.
 
-It stores two small on/off flags per site, and only when you press the key:
+It stores up to three small values per site, and only when you press the key:
 
 ```
-crispImages.enabled.<host>   Alt+P
-crispImages.hud.<host>       Alt+H
+crispImages.enabled.<host>   Alt+P            on or off
+crispImages.hud.<host>       Alt+H            overlay shown or hidden
+crispImages.bars.<host>      Alt+[ / Alt+]    side bar width
 ```
 
-About 70 bytes. No cookies, no databases. `@grant none` means the userscript storage APIs aren't even available to it.
+A few bytes each, and `rememberPerSite` turns any of them off. No cookies, no databases. `@grant none` means the userscript storage APIs aren't even available to it.
 
 To limit it to particular sites, change `@match`.
 
