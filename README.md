@@ -15,7 +15,7 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 ## Install
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
-2. Install the script.
+2. Install the script [crisp-images.user.js](https://github.com/Ikkoru/crisp-images/blob/main/crisp-images.user.js "crisp-images.user.js").
 3. Open a page with a big image and press **`Alt+P`** to switch it on for that site.
 4. Press `Alt+H` to see what it is doing.
 
@@ -23,16 +23,16 @@ Built for reading manga, comics and webtoons. Works on any image, [anywhere](#pr
 
 ## Controls
 
-| Key                                 | What it does                                                                                    |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `Alt+P`                             | Switch on or off for this site. Remembered per site                                             |
-| `Alt+M`                             | Size: fill the width → biggest whole-number zoom → one image pixel per screen pixel             |
-| `Alt+Q`                             | Filter: Lanczos3 → nearest → browser. Same size each time, so you can compare                   |
-| `Alt+H`                             | Show or hide the info overlay. Remembered per site                                              |
-| `Alt+G`                             | Show or hide the overlay's diagnostic rows (size, factor, status, memory)                       |
+| Key                                 | What it does                                                                                                               |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `Alt+P`                             | Switch on or off for this site. Remembered per site                                                                        |
+| `Alt+M`                             | Size: fill the width → biggest whole-number zoom → one image pixel per screen pixel                                        |
+| `Alt+Q`                             | Filter: Lanczos3 → nearest → browser. Same size each time, so you can compare                                              |
+| `Alt+H`                             | Show or hide the info overlay. Remembered per site                                                                         |
+| `Alt+G`                             | Show or hide the overlay's diagnostic rows (size, factor, status, memory)                                                  |
 | `Alt+[` / `Alt+]`                   | Narrower / wider black bars at the sides of each image, 0.5% of the window a step; hold to keep going. Remembered per site |
-| `Alt` + left click<br/>on an image  | Show that one image at one image pixel per screen pixel                                         |
-| `Alt` + right click<br/>on an image | Show that one image at twice its own resolution                                                 |
+| `Alt` + left click<br/>on an image  | Show that one image at one image pixel per screen pixel                                                                    |
+| `Alt` + right click<br/>on an image | Show that one image at twice its own resolution                                                                            |
 
 - **Every shortcut can be changed** at the bottom of the config, and the overlay shows whatever you set.
 - On a Mac, `Alt` is `Option`. Shortcuts also work on non-Latin keyboard layouts.
@@ -62,24 +62,24 @@ Easy ways to keep it in check:
 
 Edit the `CFG` block at the top of the script.
 
-| Setting                                | Default     | What it does                                                                                              |
-| -------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
-| `enabledOnStart`                       | `false`     | Start switched on for every site. Off means nothing happens until you press `Alt+P`                       |
-| `hudOnStart`                           | `true`      | Show the overlay when a page opens. `Alt+H` changes it, remembered per site                               |
-| `rememberPerSite`                      | all `true`  | Per feature: `enabled` (`Alt+P`), `hud` (`Alt+H`), `bars` (`Alt+[` / `Alt+]`). `false` for one: every page starts from the setting here |
-| `detailsOnStart`                       | `false`     | Show the overlay's diagnostic rows when a page opens. `Alt+G` toggles them until the page reloads         |
-| `minNaturalWidth` / `minNaturalHeight` | 700 / 1066  | Leave smaller images alone: avatars, icons, banners. 700 is just wide enough for Webtoons' strips |
-| `mode`                                 | `fit-width` | Size to start with                                                                                        |
-| `quality`                              | `lanczos3`  | Filter to start with                                                                                      |
-| `fitWidth`                             | `space`     | What "fit width" fills: all the free width (`space`), the site's column (`container`), or the window (`window`) |
-| `fitHeightToo`                         | `false`     | Fit the height as well, so a whole page fits on screen                                                    |
-| `sideBars`                             | 0           | Black bars at the left and right of each image, as a percentage of the window's width on each side. `Alt+[` / `Alt+]` change it |
-| `viewerHeight`                         | 0.95        | On readers whose pages sit in a fixed-height viewer box (K MANGA): its height as a share of the window. `0` turns this off |
-| `maxOutputPixels`                      | 64M         | Don't resample beyond this many output pixels                                                             |
-| `blobBudget`                           | 64 MB       | Memory for keeping resampled images ready ([see above](#a-note-on-memory))                                |
-| `lazyMargin`                           | 1.5         | How many screenfuls ahead to get images ready, so they are done before you scroll to them                 |
-| `keyToggle`, `keyMode`, `keyQuality`, `keyOverlay`, `keyDetails`, `keyBarsLess`, `keyBarsMore` | `Alt+P` ... | Keyboard shortcuts, like `'Ctrl+Shift+K'` or `'F2'`. `''` turns one off          |
-| `clickNative`, `clickDouble`           | `Alt+LeftClick`, `Alt+RightClick` | Click shortcuts: modifiers plus `LeftClick`, `RightClick` or `MiddleClick`          |
+| Setting                                                                                        | Default                           | What it does                                                                                                                            |
+| ---------------------------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabledOnStart`                                                                               | `false`                           | Start switched on for every site. Off means nothing happens until you press `Alt+P`                                                     |
+| `hudOnStart`                                                                                   | `true`                            | Show the overlay when a page opens. `Alt+H` changes it, remembered per site                                                             |
+| `rememberPerSite`                                                                              | all `true`                        | Per feature: `enabled` (`Alt+P`), `hud` (`Alt+H`), `bars` (`Alt+[` / `Alt+]`). `false` for one: every page starts from the setting here |
+| `detailsOnStart`                                                                               | `false`                           | Show the overlay's diagnostic rows when a page opens. `Alt+G` toggles them until the page reloads                                       |
+| `minNaturalWidth` / `minNaturalHeight`                                                         | 700 / 1066                        | Leave smaller images alone: avatars, icons, banners. 700 is just wide enough for Webtoons' strips                                       |
+| `mode`                                                                                         | `fit-width`                       | Size to start with                                                                                                                      |
+| `quality`                                                                                      | `lanczos3`                        | Filter to start with                                                                                                                    |
+| `fitWidth`                                                                                     | `space`                           | What "fit width" fills: all the free width (`space`), the site's column (`container`), or the window (`window`)                         |
+| `fitHeightToo`                                                                                 | `false`                           | Fit the height as well, so a whole page fits on screen                                                                                  |
+| `sideBars`                                                                                     | 0                                 | Black bars at the left and right of each image, as a percentage of the window's width on each side. `Alt+[` / `Alt+]` change it         |
+| `viewerHeight`                                                                                 | 0.95                              | On readers whose pages sit in a fixed-height viewer box (K MANGA): its height as a share of the window. `0` turns this off              |
+| `maxOutputPixels`                                                                              | 64M                               | Don't resample beyond this many output pixels                                                                                           |
+| `blobBudget`                                                                                   | 64 MB                             | Memory for keeping resampled images ready ([see above](#a-note-on-memory))                                                              |
+| `lazyMargin`                                                                                   | 1.5                               | How many screenfuls ahead to get images ready, so they are done before you scroll to them                                               |
+| `keyToggle`, `keyMode`, `keyQuality`, `keyOverlay`, `keyDetails`, `keyBarsLess`, `keyBarsMore` | `Alt+P` ...                       | Keyboard shortcuts, like `'Ctrl+Shift+K'` or `'F2'`. `''` turns one off                                                                 |
+| `clickNative`, `clickDouble`                                                                   | `Alt+LeftClick`, `Alt+RightClick` | Click shortcuts: modifiers plus `LeftClick`, `RightClick` or `MiddleClick`                                                              |
 
 ## Local files
 
