@@ -13,7 +13,7 @@
 // @description:ru    Изображения выглядят размытыми на 4K или HiDPI-экране при масштабе больше 100%, или на Retina? Браузер увеличивает их дешёвым билинейным фильтром. Скрипт пересэмплирует их настоящим фильтром Lanczos3 на GPU. Никаких сторонних запросов, ничего не покидает браузер. Сделан для чтения манги, комиксов и вебтунов, работает с любыми изображениями.
 // @description:es    ¿Las imágenes se ven borrosas en tu pantalla 4K o HiDPI con escala superior al 100%, o en Retina? El navegador las amplía con un filtro bilineal barato. Este script las reescala con un filtro Lanczos3 real en la GPU. Sin peticiones a terceros; nada sale de tu navegador. Pensado para leer manga y cómics, funciona con cualquier imagen.
 // @description:pt-BR As imagens ficam borradas na sua tela 4K ou HiDPI com escala acima de 100%, ou no Retina? O navegador as amplia com um filtro bilinear barato. Este script as reamostra com um filtro Lanczos3 de verdade na GPU. Sem requisições a terceiros; nada sai do seu navegador. Feito para ler mangá e quadrinhos, funciona com qualquer imagem.
-// @author       Igkor Bevzenidis
+// @author       Ikkoru
 // @license      MIT
 // @homepageURL  https://github.com/Ikkoru/crisp-images
 // @supportURL   https://github.com/Ikkoru/crisp-images/issues

@@ -192,6 +192,6 @@ For timings, paste `__crispImages.trace = true` into the console and reproduce t
 
 ## Licence
 
-MIT - see [LICENSE](LICENSE). © 2026 Igkor Bevzenidis.
+MIT - see [LICENSE](LICENSE). © 2026 Ikkoru.
 
 Issues and pull requests: <https://github.com/Ikkoru/crisp-images>
