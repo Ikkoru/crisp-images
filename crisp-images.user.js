@@ -91,7 +91,7 @@
     //   'container' - only the box the page gives the image. Keeps the page's margins,
     //                 so a narrow centred column leaves empty bars at both sides.
     //   'window'    - the window's width, wherever the image sits. Can run off the
-    //                 right edge. How it worked before v3.18.
+    //                 right edge.
     // Where the image's box sizes itself to fit its contents, all three use the window.
     fitWidth: 'space',
 

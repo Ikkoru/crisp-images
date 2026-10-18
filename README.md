@@ -49,7 +49,7 @@ So a site with a narrow centred column gets the full width instead of empty bars
 
 ## A note on memory
 
-To make switching filters and scrolling back instant, resampled images are kept in memory. On sites that take their image data back after loading, a copy of the original is kept too. That is up to 64 MB per tab. Fine for a handful of tabs, but it adds up with many image-heavy tabs open.
+To make switching filters and scrolling back instant, resampled images are kept in memory. On sites that take their image data back after loading, a copy of the original is kept too. That is up to `blobBudget` per tab, 64 MB by default. Fine for a handful of tabs, but it adds up with many image-heavy tabs open.
 
 Easy ways to keep it in check:
 
