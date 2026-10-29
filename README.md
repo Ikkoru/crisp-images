@@ -195,3 +195,9 @@ For timings, paste `__crispImages.trace = true` into the console and reproduce t
 MIT - see [LICENSE](LICENSE). © 2026 Ikkoru.
 
 Issues and pull requests: <https://github.com/Ikkoru/crisp-images>
+
+## Support
+
+This is free and stays free. If it saved you time and you'd like to say thanks, a tip is welcome but never expected:
+
+- [Ko-fi](https://ko-fi.com/eepycoding)
