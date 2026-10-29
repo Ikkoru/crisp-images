@@ -200,4 +200,4 @@ Issues and pull requests: <https://github.com/Ikkoru/crisp-images>
 
 This is free and stays free. If it saved you time and you'd like to say thanks, a tip is welcome but never expected:
 
-- [Ko-fi](https://ko-fi.com/eepycoding)
+<a href="https://ko-fi.com/eepycoding"><img src=".github/support_me_on_kofi_blue.webp" alt="Support me on Ko-fi" width="245"></a>
