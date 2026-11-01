@@ -202,4 +202,4 @@ This is free and stays free. If it saved you time and you'd like to say thanks, 
 
 <a href="https://ko-fi.com/eepycoding"><img src=".github/support_me_on_kofi_blue.webp" alt="Support me on Ko-fi" width="245"></a>
 
-- [GitHub Sponsors](https://github.com/sponsors/Ikkoru)
+- or on [GitHub Sponsors](https://github.com/sponsors/Ikkoru)
